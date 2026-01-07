@@ -1,13 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { PWAInitialize } from "../components/PWAInitialize";
 import { NativePopupSystem } from "../components/NativePopupSystem";
-import { Outfit } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthContextProvider } from "../context/AuthContext";
 import { ToastProvider } from "../components/ToastProvider";
 
-const outfit = Outfit({
-  variable: "--font-outfit",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -38,7 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full bg-gray-100 text-gray-900">
-      <body className={`${outfit.variable} antialiased h-full`}>
+      <body className={`${inter.variable} antialiased h-full`}>
         <div className="animate-fade-in duration-500 ease-in-out">
           <AuthContextProvider>
             <ToastProvider>

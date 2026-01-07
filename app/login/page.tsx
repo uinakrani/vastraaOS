@@ -148,7 +148,7 @@ export default function LoginPage() {
     if (loading) return null;
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-[#FDFDFD] relative overflow-hidden font-sans text-slate-800">
+        <div className="fixed inset-0 h-[100dvh] w-full overflow-hidden bg-[#FDFDFD] font-sans text-slate-800 flex items-center justify-center">
             {/* Recaptcha */}
             <div id="recaptcha-container"></div>
 
@@ -156,8 +156,8 @@ export default function LoginPage() {
             <div className="absolute top-[-10%] left-[-10%] w-[70%] h-[60%] bg-purple-200/40 rounded-full blur-[100px] pointer-events-none animate-pulse-slow"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[70%] h-[60%] bg-pink-200/40 rounded-full blur-[100px] pointer-events-none animate-pulse-slow" style={{ animationDelay: '2s' }}></div>
 
-            {/* Main Content Container */}
-            <div className={`w-full max-w-md px-6 py-8 relative z-10 flex flex-col items-center justify-center min-h-[600px] transition-all duration-500 ease-in-out ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+            {/* Main Content Container - Scrollable if needed, but centered primarily */}
+            <div className={`w-full h-full max-w-md px-6 py-8 relative z-10 flex flex-col items-center justify-center overflow-y-auto no-scrollbar transition-all duration-500 ease-in-out ${isAnimating ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
 
                 {/* Logo / App Icon */}
                 <div className="mb-8 relative group">
