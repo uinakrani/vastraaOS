@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  font-size: 14px;
+}
+
+body {
+  font-weight: 400;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-outfit), system-ui, sans-serif;
+  --font-mono: monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+/* PWA Hidden Scrollbars */
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html,
+body,
+#__next {
+  height: 100%;
+  min-height: 100dvh;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: 'Open Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Safe Areas and Utilities */
+:root {
+  --sat: env(safe-area-inset-top);
+  --sab: env(safe-area-inset-bottom);
+  --sal: env(safe-area-inset-left);
+  --sar: env(safe-area-inset-right);
+}
+
+.pt-safe {
+  padding-top: var(--sat);
+}
+
+.pb-safe {
+  padding-bottom: var(--sab);
+}
+
+.pl-safe {
+  padding-left: var(--sal);
+}
+
+.pr-safe {
+  padding-right: var(--sar);
+}
+
+@media (display-mode: standalone) {
+  html {
+    background-color: var(--background);
+  }
+}
+
+/* Premium Form Inputs */
+.form-input,
+.form-textarea,
+.form-select {
+  @apply block w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 text-sm font-medium placeholder-gray-400 shadow-sm transition-all duration-200 ease-in-out hover:border-indigo-300 hover:bg-white focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-600/10 focus:outline-none uppercase tracking-wide;
+}
+
+.form-label {
+  @apply block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 ml-1;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-indigo-500/20 transition-all duration-200 hover:bg-indigo-700 hover:shadow-indigo-500/30 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:pointer-events-none;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+/* Custom Datepicker Styles for Premium Feel */
+.react-datepicker-wrapper {
+  width: 100%;
+}
+
+.react-datepicker {
+  font-family: 'Open Sans', sans-serif !important;
+  border-color: #e5e7eb !important;
+}
+
+.react-datepicker__header {
+  background-color: #f9fafb !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.react-datepicker__current-month {
+  color: #374151 !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  font-size: 0.8rem !important;
+  letter-spacing: 0.05em !important;
+}
+
+.react-datepicker__day-name {
+  color: #9ca3af !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  font-size: 0.7rem !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--in-range,
+.react-datepicker__day--in-selecting-range {
+  background-color: #4f46e5 !important;
+  /* Indigo 600 */
+  color: white !important;
+  border-radius: 50% !important;
+}
+
+.react-datepicker__day--keyboard-selected {
+  background-color: #e0e7ff !important;
+  /* Indigo 100 */
+  color: #3730a3 !important;
+  border-radius: 50% !important;
+}
+
+.react-datepicker__day:hover {
+  border-radius: 50% !important;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    padding: 0;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-out-right {
+  animation: slideOutRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* PWA Animations */
+@keyframes buttonPress {
+  50% {
+    transform: scale(0.95);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-button-press:active {
+  animation: buttonPress 0.2s ease-in-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out forwards;
+}
