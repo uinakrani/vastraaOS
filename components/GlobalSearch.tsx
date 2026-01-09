@@ -172,7 +172,7 @@ export default function GlobalSearch() {
             onClick={closeModal}
         >
             <div
-                className={`w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
+                className={`w-full max-w-2xl bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
                 ${isVisible ? "translate-y-0 scale-100 opacity-100" : "-translate-y-4 scale-95 opacity-0"}`}
                 onClick={e => e.stopPropagation()}
             >
@@ -226,7 +226,7 @@ export default function GlobalSearch() {
                             </div>
                         ) : (
                             <div className="py-12 text-center text-gray-500">
-                                <p>No outfits found for "{queryText}"</p>
+                                <p>No outfits found for &quot;{queryText}&quot;</p>
                             </div>
                         )
                     ) : (

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import DashboardLayout from "../../components/DashboardLayout";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { isSameDay, subDays, isAfter, startOfDay, format } from "date-fns";
@@ -273,18 +272,10 @@ export default function ReturnsPage() {
     }
 
     return (
-        <DashboardLayout>
-            {/* Sticky Header */}
-            <div className="sticky top-0 z-30 bg-white border-b border-gray-200 transition-all">
-                <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 flex items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-lg font-bold text-gray-900 tracking-tight leading-tight">Returns</h1>
-                        <p className="text-xs text-gray-500 font-medium">Daily & History</p>
-                    </div>
-                </div>
-            </div>
+        <>
 
-            <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
+
+            <div className="w-full px-5 py-6 md:px-8 lg:px-12">
                 {/* Search Bar */}
                 <div className="mb-6 relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -365,6 +356,6 @@ export default function ReturnsPage() {
                     </div>
                 )}
             </div>
-        </DashboardLayout>
+        </>
     );
 }

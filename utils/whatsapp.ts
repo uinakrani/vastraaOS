@@ -46,7 +46,7 @@ export const sendWhatsAppMessage = async (mobile: string, message: string) => {
             }
         );
         return response.data;
-    } catch (error: any) {
+    } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
         // Detailed error logging
         if (error.response) {
             console.error("WhatsApp API Error Status:", error.response.status);
@@ -62,14 +62,16 @@ export const sendWhatsAppMessage = async (mobile: string, message: string) => {
 /**
  * Generates the standard Invoice Message content
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const generateInvoiceMessage = (order: any): string => {
     const startDate = order.startDate?.toLocaleDateString ? order.startDate.toLocaleDateString('en-IN') : new Date(order.startDate).toLocaleDateString('en-IN');
     const endDate = order.endDate?.toLocaleDateString ? order.endDate.toLocaleDateString('en-IN') : new Date(order.endDate).toLocaleDateString('en-IN');
 
     let itemsList = "";
     if (order.outfitItems && Array.isArray(order.outfitItems)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         itemsList = order.outfitItems.map((item: any, idx: number) =>
-            `${idx + 1}. *${item.designName}* (${item.size}) - ₹${item.rentalPrice}`
+            `${idx + 1}. *${item.name || item.designName}* (${item.size}) - ₹${item.rentalPrice}`
         ).join('\n');
     }
 

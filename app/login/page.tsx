@@ -92,7 +92,6 @@ export default function LoginPage() {
         try {
             if (confirmationResult) {
                 await confirmationResult.confirm(code);
-                showToast("Verified successfully!", "success");
                 // AuthContext will pick up the user change and redirect
             }
         } catch (error: any) {
@@ -148,7 +147,7 @@ export default function LoginPage() {
     if (loading) return null;
 
     return (
-        <div className="fixed inset-0 h-[100dvh] w-full overflow-hidden bg-[#FDFDFD] font-sans text-slate-800 flex items-center justify-center">
+        <div className="fixed inset-0 h-[100dvh] w-full overflow-hidden bg-white font-sans text-slate-800 flex items-center justify-center">
             {/* Recaptcha */}
             <div id="recaptcha-container"></div>
 
@@ -191,8 +190,7 @@ export default function LoginPage() {
                 {step === 'phone' ? (
                     <form onSubmit={handleSendOtp} className="w-full space-y-6 animate-fade-in">
                         {/* Phone Input */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-700 ml-1">Phone Number</label>
+                        <div className="space-y-4">
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                     <FiSmartphone className="text-slate-400 group-focus-within:text-purple-600 transition-colors" />
@@ -207,7 +205,7 @@ export default function LoginPage() {
                                         const val = e.target.value.replace(/\D/g, '');
                                         if (val.length <= 10) setPhoneNumber(val);
                                     }}
-                                    className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-purple-200 hover:bg-white focus:ring-4 focus:ring-purple-500/10 rounded-2xl py-4 pl-24 text-base font-medium text-slate-800 placeholder:text-slate-400 transition-all duration-200 outline-none shadow-sm group-hover:shadow-md"
+                                    className="form-input pl-24"
                                     placeholder="Enter your phone"
                                     autoFocus
                                 />
@@ -218,7 +216,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={isSigningIn || phoneNumber.length < 10}
-                            className="w-full bg-[#0F172A] hover:bg-slate-800 text-white font-medium py-4 rounded-2xl shadow-xl shadow-slate-900/10 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
+                            className="w-full bg-[#0F172A] hover:bg-slate-800 text-white font-medium py-4 rounded-[1.5rem] shadow-xl shadow-slate-900/10 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
                         >
                             {isSigningIn ? (
                                 <div className="h-5 w-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
@@ -243,7 +241,7 @@ export default function LoginPage() {
                             type="button"
                             onClick={handleGoogleSignIn}
                             disabled={isSigningIn}
-                            className="w-full bg-white border border-slate-100 hover:border-slate-200 text-slate-600 font-medium py-4 rounded-2xl shadow-sm hover:shadow-md active:scale-95 transition-all duration-200 flex items-center justify-center gap-3"
+                            className="w-full bg-white border border-slate-100 hover:border-slate-200 text-slate-600 font-medium py-4 rounded-[1.5rem] shadow-sm hover:shadow-md active:scale-95 transition-all duration-200 flex items-center justify-center gap-3"
                         >
                             <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="h-5 w-5" />
                             <span>Google</span>
@@ -258,7 +256,7 @@ export default function LoginPage() {
                                 <button
                                     type="button"
                                     onClick={() => { setStep('phone'); setOtp(["", "", "", "", "", ""]); }}
-                                    className="text-[10px] font-bold text-purple-600 hover:text-purple-700 uppercase tracking-wide"
+                                    className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-wide"
                                 >
                                     Change Number
                                 </button>
@@ -271,9 +269,10 @@ export default function LoginPage() {
                                         type="tel"
                                         maxLength={1}
                                         value={digit}
+                                        autoFocus={idx === 0}
                                         onChange={(e) => handleOtpChange(idx, e.target.value)}
                                         onKeyDown={(e) => handleKeyDown(idx, e)}
-                                        className="w-full aspect-[4/5] text-center text-2xl font-medium bg-slate-50 border-transparent focus:bg-white focus:border-purple-200 rounded-2xl outline-none focus:ring-4 focus:ring-purple-500/10 transition-all shadow-sm focus:shadow-md caret-purple-600 text-slate-800"
+                                        className="form-input text-center text-2xl px-0"
                                         autoComplete="one-time-code"
                                     />
                                 ))}

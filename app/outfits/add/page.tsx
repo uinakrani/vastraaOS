@@ -1,657 +1,417 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import debounce from "lodash.debounce";
-import DashboardLayout from "../../../components/DashboardLayout";
-import { collection, addDoc, query, where, getDocs, getDoc, doc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../../../firebaseConfig";
-import { FiUploadCloud, FiX, FiGitMerge, FiAlertCircle, FiCheckCircle, FiWifi, FiWifiOff } from "react-icons/fi";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../../firebaseConfig";
+import { FiUploadCloud, FiX, FiCheck, FiCamera, FiChevronLeft, FiPlus, FiMinus, FiImage, FiGitMerge, FiArrowLeft } from "react-icons/fi";
 import { UserAuth } from "../../../context/AuthContext";
 import { useToast } from "../../../components/ToastProvider";
+import imageCompression from 'browser-image-compression';
 
 const availableSizes = ["28", "30", "32", "34", "36", "38", "40", "42", "44", "46"];
 
 export default function AddOutfit() {
-    const { user, loading: authLoading, googleSignIn } = UserAuth();
+    const { user, loading: authLoading, currentStudio } = UserAuth();
+    const router = useRouter();
+    const { showToast } = useToast();
+
+    // Form State
     const [outfitName, setOutfitName] = useState("");
     const [outfitCode, setOutfitCode] = useState("");
     const [rentalPrice, setRentalPrice] = useState("");
     const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
     const [sizeQuantities, setSizeQuantities] = useState<{ [key: string]: number }>({});
     const [customSizeInput, setCustomSizeInput] = useState("");
-    const [activeTab, setActiveTab] = useState("single");
-    const { showToast } = useToast();
 
-    // Validation State
-    const [codeError, setCodeError] = useState("");
-    const [isCheckingCode, setIsCheckingCode] = useState(false);
+    // UI State
+    const [activeTab, setActiveTab] = useState("single");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState<string>("");
+    const [browserOnline, setBrowserOnline] = useState<boolean>(true);
 
     // Image Upload State
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [submitStatus, setSubmitStatus] = useState<string>(""); // "Uploading Image...", "Saving..."
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Firebase Connection State
-    const [browserOnline, setBrowserOnline] = useState<boolean>(true);
-
-    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setImageFile(file);
-            setImagePreview(URL.createObjectURL(file));
-        }
-    };
-
-    const removeImage = () => {
-        setImageFile(null);
-        setImagePreview(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-    };
+    // Validation State
+    const [codeError, setCodeError] = useState("");
 
     // Monitor browser online/offline status
     useEffect(() => {
         const handleOnline = () => setBrowserOnline(true);
         const handleOffline = () => setBrowserOnline(false);
-
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
-
-        // Set initial state
         setBrowserOnline(navigator.onLine);
-
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
     }, []);
 
-    // Debounced Code Check - DISABLED TEMPORARILY
-    const checkCodeExistence = useCallback(
-        debounce(async (code: string) => {
-            // if (!code) return;
-            // setIsCheckingCode(true);
-            // try {
-            //     const q = query(collection(db, "outfits"), where("code", "==", code));
-            //     const querySnapshot = await getDocs(q);
-            //     if (!querySnapshot.empty) {
-            //         setCodeError("This product code already exists.");
-            //     } else {
-            //         setCodeError("");
-            //     }
-            // } catch (error) {
-            //     console.error("Error checking code:", error);
-            // } finally {
-            //     setIsCheckingCode(false);
-            // }
-        }, 500),
-        []
-    );
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            if (file.size > 5 * 1024 * 1024) {
+                showToast("Image size should be less than 5MB", "error");
+                return;
+            }
+            setImageFile(file);
+            setImagePreview(URL.createObjectURL(file));
+        }
+    };
+
+    const removeImage = (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        setImageFile(null);
+        setImagePreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
 
     const handleCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value.toUpperCase().trim();
         setOutfitCode(value);
-        if (value) {
-            setCodeError(""); // Clear error while typing before check
-            // checkCodeExistence(value); // DISABLED
-        } else {
-            setCodeError("");
-        }
+        if (value) setCodeError("");
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        // 1. Basic Validation
-        if (!outfitName || !outfitCode || !rentalPrice) {
-            showToast("Please fill in all required fields.", "error");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-        }
-
-        if (selectedSizes.length === 0) {
-            showToast("Please select at least one size.", "error");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-        }
-
-        if (!user) {
-            showToast("You must be logged in to add an outfit.", "error");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-        }
-
-        if (!browserOnline) {
-            showToast("Cannot save outfit: Your browser is offline.", "error");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-        }
-
-        if (codeError) {
-            showToast("Please resolve errors before submitting.", "error");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-        }
-
-        setIsSubmitting(true);
-        setSubmitStatus("Checking code...");
-
-        console.log("Starting outfit submission...", { outfitName, outfitCode, rentalPrice });
-
-        try {
-            // 2. Final Code Uniqueness Check (prevent race conditions) - DISABLED
-            // const q = query(collection(db, "outfits"), where("code", "==", outfitCode));
-            // const querySnapshot = await getDocs(q);
-            // if (!querySnapshot.empty) {
-            //     throw new Error("This product code already exists. Please use a different one.");
-            // }
-
-            // 3. Upload Image (Sync)
-            let finalImageUrl = "";
-            if (imageFile) {
-                setSubmitStatus("Uploading Image...");
-                try {
-                    console.log("Uploading image:", imageFile.name);
-                    const storageRef = ref(storage, `outfits/${Date.now()}_${imageFile.name}`);
-                    const snapshot = await uploadBytes(storageRef, imageFile);
-                    finalImageUrl = await getDownloadURL(snapshot.ref);
-                    console.log("Image upload successful:", finalImageUrl);
-                } catch (uploadError: any) {
-                    console.error("Image upload failed:", uploadError);
-                    throw new Error("Failed to upload image. Please try again or use a smaller image.");
-                }
-            } else {
-                console.log("No image selected, skipping upload.");
-            }
-
-            // 4. Save to Firestore
-            setSubmitStatus("Saving Data...");
-            const cleanPrice = parseFloat(rentalPrice.replace(/,/g, ""));
-            const finalPrice = isNaN(cleanPrice) ? 0 : cleanPrice;
-
-            // Prepare size quantities for selected sizes only
-            const finalSizeQuantities: { [key: string]: number } = {};
-            selectedSizes.forEach(size => {
-                finalSizeQuantities[size] = sizeQuantities[size] || 1;
-            });
-
-            const outfitData = {
-                name: outfitName.trim(),
-                code: outfitCode,
-                price: finalPrice,
-                imageUrl: finalImageUrl,
-                sizes: selectedSizes, // Keep for search/filter
-                sizeQuantities: finalSizeQuantities, // New field for stock
-                createdAt: new Date(),
-                category: "Uncategorized",
-                status: "Available"
-            };
-
-            console.log("Saving to Firestore:", outfitData);
-
-            // Create a timeout promise
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Request timed out. Please check your internet connection.")), 15000)
-            );
-
-            // Race the addDoc against the timeout
-            const docRef = await Promise.race([
-                addDoc(collection(db, "outfits"), outfitData),
-                timeoutPromise
-            ]) as any; // Cast to avoid TS issues with race types if needed, or rely on inference
-
-            console.log("Document written with ID: ", docRef.id);
-
-            // 5. Success State
-            showToast(`✨ Outfit "${outfitCode}" added successfully!`, "success");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-
-            // Reset form
-            setOutfitName("");
-            setOutfitCode("");
-            setRentalPrice("");
-            setSelectedSizes([]);
-            setSizeQuantities({});
-            removeImage();
-
-        } catch (error: any) {
-            console.error("Error adding document DETAIL: ", error);
-
-            // Show detailed Firebase error messages
-            let errorMessage = "An unexpected error occurred.";
-
-            if (error.code) {
-                switch (error.code) {
-                    case 'permission-denied':
-                        errorMessage = "Firebase Error: Permission denied. Please check that you are logged in and Firebase security rules are configured correctly.";
-                        break;
-                    case 'unavailable':
-                        errorMessage = "Firebase Error: Service unavailable. Check your internet connection and try again.";
-                        break;
-                    case 'cancelled':
-                        errorMessage = "Firebase Error: Operation was cancelled.";
-                        break;
-                    case 'unknown':
-                        errorMessage = "Firebase Error: Unknown error occurred. Please try again.";
-                        break;
-                    case 'invalid-argument':
-                        errorMessage = "Firebase Error: Invalid data provided. Please check your input.";
-                        break;
-                    case 'deadline-exceeded':
-                        errorMessage = "Firebase Error: Operation timed out. Check your internet connection.";
-                        break;
-                    case 'not-found':
-                        errorMessage = "Firebase Error: The requested resource was not found.";
-                        break;
-                    case 'already-exists':
-                        errorMessage = "Firebase Error: This outfit already exists.";
-                        break;
-                    case 'resource-exhausted':
-                        errorMessage = "Firebase Error: Resource quota exceeded. Please try again later.";
-                        break;
-                    case 'failed-precondition':
-                        errorMessage = "Firebase Error: Operation failed due to current state. Please check your Firebase configuration.";
-                        break;
-                    case 'aborted':
-                        errorMessage = "Firebase Error: Operation was aborted.";
-                        break;
-                    case 'out-of-range':
-                        errorMessage = "Firebase Error: Parameter value is out of range.";
-                        break;
-                    case 'unauthenticated':
-                        errorMessage = "Firebase Error: User is not authenticated. Please log in again.";
-                        break;
-                    default:
-                        errorMessage = `Firebase Error (${error.code}): ${error.message}`;
-                }
-            } else if (error.message) {
-                errorMessage = `Error: ${error.message}`;
-            }
-
-            showToast(errorMessage, "error");
-            window.scrollTo({ top: 0, behavior: "smooth" });
-        } finally {
-            setIsSubmitting(false);
-            setSubmitStatus("");
-        }
-    };
-
-    const handleSizeChange = (size: string) => {
-        setSelectedSizes((prevSizes) => {
-            const isSelected = prevSizes.includes(size);
-            if (isSelected) {
-                // Removing size
-                const newSizes = prevSizes.filter((s) => s !== size);
+    const handleSizeToggle = (size: string) => {
+        setSelectedSizes((prev) => {
+            if (prev.includes(size)) {
+                // Remove size
+                const newSizes = prev.filter(s => s !== size);
                 const newQuantities = { ...sizeQuantities };
                 delete newQuantities[size];
                 setSizeQuantities(newQuantities);
                 return newSizes;
             } else {
-                // Adding size
-                setSizeQuantities(prev => ({ ...prev, [size]: 1 }));
-                return [...prevSizes, size];
+                // Add size
+                setSizeQuantities(q => ({ ...q, [size]: 1 }));
+                return [...prev, size];
             }
         });
     };
 
     const handleQuantityChange = (size: string, delta: number) => {
         setSizeQuantities(prev => {
-            const currentQty = prev[size] || 1;
-            const newQty = Math.max(1, currentQty + delta);
-            return { ...prev, [size]: newQty };
+            const current = prev[size] || 1;
+            const newVal = Math.max(1, current + delta);
+            return { ...prev, [size]: newVal };
         });
     };
 
-    const handleAddCustomSize = () => {
+    const handleAddCustomSize = (e?: React.FormEvent) => {
+        e?.preventDefault();
         if (customSizeInput.trim()) {
             const newSize = customSizeInput.trim().toUpperCase();
             if (!selectedSizes.includes(newSize)) {
-                setSelectedSizes([...selectedSizes, newSize]);
+                setSelectedSizes(prev => [...prev, newSize]);
                 setSizeQuantities(prev => ({ ...prev, [newSize]: 1 }));
+                setCustomSizeInput("");
+                showToast(`Added size ${newSize}`, "success");
+            } else {
+                showToast("Size already added", "error");
             }
-            setCustomSizeInput("");
         }
     };
 
-    if (authLoading) {
-        return (
-            <DashboardLayout>
-                <div className="flex h-[80vh] items-center justify-center">
-                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600"></div>
-                </div>
-            </DashboardLayout>
-        );
-    }
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
 
-    if (!user) {
-        return (
-            <DashboardLayout>
-                <div className="flex h-[80vh] flex-col items-center justify-center text-center">
-                    <div className="bg-red-50 p-6 rounded-2xl max-w-md border border-red-100 shadow-sm">
-                        <h2 className="text-xl font-bold text-red-600 mb-2">Access Denied</h2>
-                        <p className="text-gray-600 mb-6">You must be logged in to add a new outfit. Your session may have expired.</p>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    await googleSignIn();
-                                } catch (e) {
-                                    console.error(e);
-                                }
-                            }}
-                            className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition"
-                        >
-                            Log In with Google
-                        </button>
-                    </div>
-                </div>
-            </DashboardLayout>
-        );
-    }
+        if (!outfitName || !outfitCode || !rentalPrice || selectedSizes.length === 0) {
+            showToast("Please fill all fields and select a size", "error");
+            return;
+        }
+
+        if (!browserOnline) {
+            showToast("You are offline", "error");
+            return;
+        }
+
+        setIsSubmitting(true);
+        setSubmitStatus("Saving...");
+
+        try {
+            // Upload Strategy: Convert to Base64 to bypass Storage CORS issues
+            let finalImageUrl = "";
+            if (imageFile) {
+                setSubmitStatus("Compressing Image...");
+
+                // Very aggressive compression for Firestore 1MB document limit
+                const options = {
+                    maxSizeMB: 0.2, // Aim for ~200kb
+                    maxWidthOrHeight: 800,
+                    useWebWorker: true,
+                    initialQuality: 0.6
+                };
+
+                try {
+                    const compressedFile = await imageCompression(imageFile, options);
+                    setSubmitStatus("Processing...");
+
+                    // Convert compressed blob to Base64 string
+                    finalImageUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(compressedFile);
+                    });
+                } catch (err) {
+                    console.error("Image processing failed:", err);
+                    showToast("Image compression failed. Use a smaller photo.", "error");
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
+            // Save Data
+            setSubmitStatus("Finalizing...");
+            const finalPrice = parseFloat(rentalPrice.replace(/,/g, "")) || 0;
+
+            const outfitData = {
+                studioId: currentStudio?.studioId,
+                name: outfitName.trim(),
+                searchName: outfitName.trim().toLowerCase(), // For case-insensitive search
+                code: outfitCode.trim().toUpperCase(),
+                price: finalPrice,
+                imageUrl: finalImageUrl,
+                sizes: selectedSizes,
+                sizeQuantities: sizeQuantities,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+                category: "Uncategorized",
+                status: "Available",
+                createdBy: user?.uid
+            };
+
+            if (!outfitData.studioId) {
+                throw new Error("Missing Studio workspace. Please refresh and try again.");
+            }
+
+            await addDoc(collection(db, "outfits"), outfitData);
+
+            showToast("Outfit added successfully!", "success");
+            router.back();
+
+        } catch (error: any) {
+            console.error("Save Error:", error);
+            showToast(`Save failed: ${error.message || "Unknown error"}`, "error");
+        } finally {
+            setIsSubmitting(false);
+            setSubmitStatus("");
+        }
+    };
+
+    if (authLoading || !currentStudio) return (
+        <div className="flex h-screen items-center justify-center bg-gray-50">
+            <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-gray-500 font-medium">Initializing workspace...</p>
+            </div>
+        </div>
+    );
 
     return (
-        <DashboardLayout>
-            <div className="mx-auto max-w-4xl">
-                <h1 className="text-3xl font-bold text-gray-800 mb-6">Add New Outfit</h1>
-
-                {/* Tab Selection */}
-                <div className="mb-6 border-b border-gray-200">
-                    <nav className="-mb-px flex space-x-8">
-                        <button
-                            onClick={() => setActiveTab("single")}
-                            className={`${activeTab === "single"
-                                ? "border-indigo-500 text-indigo-600"
-                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-                        >
-                            Single Entry
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("bulk")}
-                            className={`${activeTab === "bulk"
-                                ? "border-indigo-500 text-indigo-600"
-                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
-                        >
-                            Bulk Entry
-                        </button>
-                    </nav>
+        <>
+            <div className="min-h-full bg-gray-50 pb-32">
+                {/* Sticky Header */}
+                <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 py-4 flex items-center justify-between shadow-sm">
+                    <button
+                        onClick={() => router.back()}
+                        className="p-2 -ml-1 text-gray-400 hover:text-gray-900 rounded-full hover:bg-gray-100 transition-colors"
+                    >
+                        <FiArrowLeft className="w-6 h-6" />
+                    </button>
+                    <h1 className="text-lg font-bold text-gray-900">Add New Outfit</h1>
+                    <div className="w-10"></div> {/* Spacer for alignment */}
                 </div>
 
-                {activeTab === "single" ? (
-                    <div className="bg-white p-8 rounded-xl border border-gray-200 shadow-sm">
+                <div className="w-full px-5 md:px-8 lg:px-12 py-6 space-y-6">
 
-                        {/* Connection Status */}
-                        <div className="mb-6 space-y-3">
-                            {/* Browser Online Status */}
-                            <div className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-medium ${browserOnline
-                                ? "bg-green-50 text-green-700 border border-green-200"
-                                : "bg-red-50 text-red-700 border border-red-200"
-                                }`}>
-                                {browserOnline ? (
-                                    <>
-                                        <div className="h-2 w-2 bg-green-500 rounded-full mr-2"></div>
-                                        Browser Online
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="h-2 w-2 bg-red-500 rounded-full mr-2"></div>
-                                        Browser Offline
-                                    </>
-                                )}
-                            </div>
+                    {/* Image Upload - Center Stage */}
+                    <div className="flex flex-col items-center justify-center">
+                        <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`relative w-40 h-40 rounded-3xl shadow-sm border-2 border-dashed overflow-hidden flex flex-col items-center justify-center cursor-pointer transition-all active:scale-95 group
+                                ${imagePreview ? 'border-transparent bg-white' : 'border-gray-300 bg-white hover:border-indigo-400 hover:bg-indigo-50'}`}
+                        >
+                            {imagePreview ? (
+                                <>
+                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <FiCamera className="text-white w-8 h-8 drop-shadow-md" />
+                                    </div>
+                                    <button
+                                        onClick={removeImage}
+                                        className="absolute top-2 right-2 p-1.5 bg-white/90 backdrop-blur rounded-full text-red-500 shadow-sm"
+                                    >
+                                        <FiX className="w-4 h-4" />
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-14 h-14 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center mb-2">
+                                        <FiImage className="w-7 h-7 stroke-1.5" />
+                                    </div>
+                                    <span className="text-xs font-semibold text-gray-400">Add Photo</span>
+                                </>
+                            )}
+                        </div>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleImageChange}
+                        />
+                    </div>
+
+                    {/* Details Card - iOS Style */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+                        {/* Name Input */}
+                        <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                            <label className="text-sm font-medium text-gray-500 w-24">Name</label>
+                            <input
+                                type="text"
+                                value={outfitName}
+                                onChange={(e) => setOutfitName(e.target.value.toUpperCase())}
+                                placeholder="Royal Blue Lehenga"
+                                className="flex-1 text-right font-medium text-gray-900 placeholder:text-gray-300 border-none focus:ring-0 p-0"
+                            />
                         </div>
 
+                        {/* Code Input */}
+                        <div className="flex items-center px-4 py-3 border-b border-gray-100">
+                            <label className="text-sm font-medium text-gray-500 w-24">Code</label>
+                            <input
+                                type="text"
+                                value={outfitCode}
+                                onChange={handleCodeChange}
+                                placeholder="LBL001"
+                                className={`flex-1 text-right font-medium text-gray-900 placeholder:text-gray-300 border-none focus:ring-0 p-0 uppercase ${codeError ? 'text-red-500' : ''}`}
+                            />
+                        </div>
 
+                        {/* Price Input */}
+                        <div className="flex items-center px-4 py-3">
+                            <label className="text-sm font-medium text-gray-500 w-24">Rent (₹)</label>
+                            <input
+                                type="number"
+                                pattern="[0-9]*" inputMode="numeric"
+                                value={rentalPrice}
+                                onChange={(e) => setRentalPrice(e.target.value)}
+                                placeholder="0"
+                                className="flex-1 text-right font-medium text-gray-900 placeholder:text-gray-300 border-none focus:ring-0 p-0"
+                            />
+                        </div>
+                    </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label htmlFor="outfitName" className="form-label">Outfit Name</label>
-                                    <input
-                                        type="text"
-                                        id="outfitName"
-                                        value={outfitName}
-                                        onChange={(e) => setOutfitName(e.target.value.toUpperCase())}
-                                        className="form-input"
-                                        placeholder="E.G. ROYAL BLUE LEHENGA"
-                                        required
-                                        disabled={isSubmitting}
-                                    />
-                                </div>
-                                <div>
-                                    <label htmlFor="outfitCode" className="form-label">Outfit Code (Unique)</label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            id="outfitCode"
-                                            value={outfitCode}
-                                            onChange={handleCodeChange}
-                                            className={`form-input ${codeError ? "border-red-500 focus:border-red-500" : ""}`}
-                                            placeholder="E.G. LBL001"
-                                            required
-                                            disabled={isSubmitting}
-                                        />
-                                        {(isCheckingCode || (isSubmitting && submitStatus === "Checking code...")) && (
-                                            <div className="absolute right-3 top-3">
-                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {codeError && <p className="mt-1 text-xs text-red-500 font-medium">{codeError}</p>}
-                                </div>
-                            </div>
+                    {/* Size Selector */}
+                    <div>
+                        <div className="flex justify-between items-center mb-3 px-2">
+                            <h3 className="text-sm font-bold text-gray-900">Available Sizes</h3>
+                        </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label htmlFor="rentalPrice" className="form-label">Rental Price (INR)</label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            id="rentalPrice"
-                                            value={rentalPrice}
-                                            onChange={(e) => {
-                                                const value = e.target.value.replace(/[^0-9]/g, "");
-                                                if (value) {
-                                                    setRentalPrice(new Intl.NumberFormat('en-IN').format(parseInt(value)));
-                                                } else {
-                                                    setRentalPrice("");
-                                                }
-                                            }}
-                                            className="form-input"
-                                            placeholder="0"
-                                            required
-                                            disabled={isSubmitting}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-sm font-medium text-gray-700">Outfit Image</label>
-                                    {!imagePreview ? (
-                                        <div
-                                            onClick={() => !isSubmitting && fileInputRef.current?.click()}
-                                            className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg ${isSubmitting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-50'} transition-colors`}
-                                        >
-                                            <div className="space-y-1 text-center">
-                                                <FiUploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                                                <div className="text-sm text-gray-600">
-                                                    <span className="font-medium text-indigo-600 hover:text-indigo-500">Upload a file</span>
-                                                    <span className="pl-1">or drag and drop</span>
-                                                </div>
-                                                <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB</p>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="relative mt-1 w-full h-32 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 group">
-                                            <img src={imagePreview} alt="Preview" className="h-full w-full object-contain" />
-
-                                            {isSubmitting && submitStatus === "Uploading Image..." && (
-                                                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                                                </div>
-                                            )}
-
-                                            {!isSubmitting && (
-                                                <button
-                                                    type="button"
-                                                    onClick={removeImage}
-                                                    className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md text-gray-500 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                                                >
-                                                    <FiX className="h-4 w-4" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        className="hidden"
-                                        accept="image/*"
-                                        onChange={handleImageChange}
-                                        disabled={isSubmitting}
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="form-label mb-2">Available Sizes & Quantities</label>
-                                <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3 mb-3">
-                                    {availableSizes.map((size) => {
-                                        const isSelected = selectedSizes.includes(size);
-                                        return (
-                                            <div
-                                                key={size}
-                                                onClick={() => !isSubmitting && handleSizeChange(size)}
-                                                className={`relative flex flex-col items-center p-2 rounded-xl border transition-all duration-200 cursor-pointer ${isSelected
-                                                    ? "border-indigo-600 bg-indigo-50 shadow-sm"
-                                                    : "border-gray-200 bg-gray-50 hover:bg-white hover:border-gray-300"
-                                                    } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                            >
-
-                                                <button
-                                                    type="button"
-                                                    disabled={isSubmitting}
-                                                    className={`w-full text-center text-sm font-bold mb-2 pointer-events-none ${isSelected ? "text-indigo-700" : "text-gray-600"}`}
-                                                >
-                                                    {size}
-                                                </button>
-
-                                                {isSelected && (
-                                                    <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => { e.stopPropagation(); handleQuantityChange(size, -1); }}
-                                                            className="w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 text-xs font-bold"
-                                                        >
-                                                            -
-                                                        </button>
-                                                        <span className="text-sm font-semibold text-gray-800 w-6 text-center">
-                                                            {sizeQuantities[size] || 1}
-                                                        </span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => { e.stopPropagation(); handleQuantityChange(size, 1); }}
-                                                            className="w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 text-xs font-bold"
-                                                        >
-                                                            +
-                                                        </button>
-                                                    </div>
-                                                )}
-                                                {!isSelected && (
-                                                    <div className="h-6 w-full"></div> // Spacer
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Custom Sizes Display */}
-                                {selectedSizes.some(s => !availableSizes.includes(s)) && (
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        {selectedSizes.filter(s => !availableSizes.includes(s)).map((size) => (
-                                            <div key={size} className="rounded-xl border border-indigo-600 bg-indigo-600 text-white shadow-md p-2 flex flex-col items-center gap-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-bold">{size}</span>
-                                                    <button type="button" onClick={() => handleSizeChange(size)} className="hover:text-red-200"><FiX className="w-3 h-3" /></button>
-                                                </div>
-                                                <div className="flex items-center space-x-1 bg-indigo-700 rounded-lg px-1">
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => { e.stopPropagation(); handleQuantityChange(size, -1); }}
-                                                        className="w-5 h-5 flex items-center justify-center rounded-full text-white hover:bg-indigo-500 text-xs font-bold"
-                                                    >
-                                                        -
-                                                    </button>
-                                                    <span className="text-sm font-semibold text-white w-5 text-center">
-                                                        {sizeQuantities[size] || 1}
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => { e.stopPropagation(); handleQuantityChange(size, 1); }}
-                                                        className="w-5 h-5 flex items-center justify-center rounded-full text-white hover:bg-indigo-500 text-xs font-bold"
-                                                    >
-                                                        +
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Add Custom Size Input */}
-                                <div className="flex items-center gap-2 max-w-xs">
-                                    <input
-                                        type="text"
-                                        value={customSizeInput}
-                                        onChange={(e) => setCustomSizeInput(e.target.value)}
-                                        placeholder="Add Custom Size"
-                                        className="form-input py-2 text-sm"
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                handleAddCustomSize();
-                                            }
-                                        }}
-                                    />
+                        {/* Chips Grid */}
+                        <div className="grid grid-cols-5 gap-3 mb-4">
+                            {availableSizes.map(size => {
+                                const active = selectedSizes.includes(size);
+                                return (
                                     <button
-                                        type="button"
-                                        onClick={handleAddCustomSize}
-                                        disabled={!customSizeInput.trim() || isSubmitting}
-                                        className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                                        key={size}
+                                        onClick={() => handleSizeToggle(size)}
+                                        className={`h-12 rounded-xl flex items-center justify-center text-sm font-bold transition-all duration-200
+                                            ${active
+                                                ? 'bg-gray-900 text-white shadow-md transform scale-105'
+                                                : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'}`}
                                     >
-                                        Add
+                                        {size}
                                     </button>
-                                </div>
-                            </div>
+                                )
+                            })}
+                        </div>
 
+                        {/* Custom Size Input */}
+                        <form onSubmit={handleAddCustomSize} className="flex gap-2 mb-6">
+                            <input
+                                type="text"
+                                value={customSizeInput}
+                                onChange={(e) => setCustomSizeInput(e.target.value.toUpperCase())}
+                                placeholder="Add custom size (e.g. XL)"
+                                className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all placeholder:text-gray-400"
+                            />
                             <button
                                 type="submit"
-                                disabled={isSubmitting || !!codeError || isCheckingCode || !browserOnline}
-                                className={`w-full rounded-xl py-3 text-lg font-semibold text-white shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all
-                                    ${isSubmitting || !!codeError || isCheckingCode || !browserOnline
-                                        ? "bg-indigo-400 cursor-not-allowed"
-                                        : "bg-indigo-600 hover:bg-indigo-700 hover:shadow-lg"}`}
+                                disabled={!customSizeInput}
+                                className="bg-white border border-gray-200 text-gray-900 px-4 py-3 rounded-xl font-bold text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50"
                             >
-                                {!browserOnline
-                                    ? "Browser Offline - Check Connection"
-                                    : isSubmitting
-                                        ? (submitStatus || "Saving...")
-                                        : "Add Outfit"
-                                }
+                                <FiPlus className="w-5 h-5" />
                             </button>
                         </form>
+
+                        {/* Stock Quantity List */}
+                        {selectedSizes.length > 0 && (
+                            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
+                                <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Stock Quantity</span>
+                                </div>
+                                <div className="divide-y divide-gray-100">
+                                    {selectedSizes.map(size => (
+                                        <div key={size} className="flex items-center justify-between p-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg bg-gray-900 text-white flex items-center justify-center text-xs font-bold">
+                                                    {size}
+                                                </div>
+                                                <span className="text-sm font-medium text-gray-700">Stock Count</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => handleQuantityChange(size, -1)}
+                                                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 active:bg-gray-100"
+                                                >
+                                                    <FiMinus className="w-3.5 h-3.5" />
+                                                </button>
+                                                <span className="w-4 text-center text-sm font-bold text-gray-900">{sizeQuantities[size] || 1}</span>
+                                                <button
+                                                    onClick={() => handleQuantityChange(size, 1)}
+                                                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 active:bg-gray-100"
+                                                >
+                                                    <FiPlus className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
-                ) : (
-                    <div className="bg-white p-12 rounded-xl text-center border border-gray-200 shadow-sm">
-                        <div className="text-gray-400 mb-4">
-                            <FiGitMerge className="mx-auto h-12 w-12" />
-                        </div>
-                        <h3 className="text-lg font-medium text-gray-900">Bulk Entry</h3>
-                        <p className="mt-1 text-gray-500">This feature is currently under development.</p>
-                    </div>
-                )}
+                </div>
+
+                {/* Sticky Bottom Action Bar */}
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 pb-safe z-30 lg:pl-72 transition-all">
+                    <button
+                        onClick={() => handleSubmit()}
+                        disabled={isSubmitting}
+                        className={`w-full py-4 rounded-xl flex items-center justify-center gap-3 text-white font-bold text-base shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all
+                            ${isSubmitting ? 'bg-indigo-400 cursor-wait' : 'bg-[#0F172A]'}`}
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <span>{submitStatus}</span>
+                            </>
+                        ) : (
+                            <>
+                                <FiCheck className="w-5 h-5" />
+                                <span>Save Outfit</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+
             </div>
-        </DashboardLayout >
+        </>
     );
 }

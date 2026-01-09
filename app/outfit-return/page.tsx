@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import DashboardLayout from "../../components/DashboardLayout";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, query, where, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
+import { FiArrowLeft } from "react-icons/fi";
+import { UserAuth } from "../../context/AuthContext";
 
 interface OutfitItem {
   designCode: string;
@@ -30,6 +31,7 @@ interface Order {
 }
 
 export default function OutfitReturnProcess() {
+  const { currentStudio } = UserAuth();
   const router = useRouter();
   const [mobileNumber, setMobileNumber] = useState("");
   const [foundOrders, setFoundOrders] = useState<Order[]>([]);
@@ -45,8 +47,14 @@ export default function OutfitReturnProcess() {
     setDamageDetails({});
 
     try {
+      if (!currentStudio?.studioId) return;
       const ordersRef = collection(db, "orders");
-      const q = query(ordersRef, where("customerMobile", "==", mobileNumber));
+      const normalizedMobile = mobileNumber.startsWith("+91") ? mobileNumber : "+91" + mobileNumber;
+      const q = query(
+        ordersRef,
+        where("studioId", "==", currentStudio.studioId),
+        where("customerMobile", "==", normalizedMobile)
+      );
       const querySnapshot = await getDocs(q);
 
       const ordersData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Order[];
@@ -106,10 +114,15 @@ export default function OutfitReturnProcess() {
   };
 
   return (
-    <DashboardLayout>
-      <div className="mx-auto max-w-4xl p-4">
-        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Outfit Return Process</h1>
+    <>
+      <div className="w-full px-5 md:px-8 lg:px-12 py-6">
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm mb-6 border border-gray-100">
+          <div className="flex items-center gap-3 mb-6">
+            <button onClick={() => router.back()} className="p-2 -ml-2 text-gray-400 hover:text-gray-900 rounded-full hover:bg-gray-100 transition-colors">
+              <FiArrowLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-2xl font-bold text-gray-800">Outfit Return Process</h1>
+          </div>
 
           <div className="mb-8 p-6 rounded-lg border border-gray-200 bg-gray-50 shadow-sm">
             <h2 className="text-2xl font-bold text-gray-700 mb-5">Search Order by Customer Mobile</h2>
@@ -206,6 +219,6 @@ export default function OutfitReturnProcess() {
           )}
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

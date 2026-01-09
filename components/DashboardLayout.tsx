@@ -4,13 +4,14 @@ import Link from "next/link";
 import React, { ReactNode, useState } from "react";
 import {
     FiHome,
-    FiGitMerge,
     FiChevronRight,
     FiMenu,
     FiLogOut,
     FiShoppingBag,
-    FiCalendar
+    FiCalendar,
+    FiRotateCcw
 } from "react-icons/fi";
+import { Shirt } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { UserAuth } from "../context/AuthContext";
 import GlobalSearch from "./GlobalSearch";
@@ -42,6 +43,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const pathname = usePathname();
     const { user, logOut, currentStudio } = UserAuth();
 
+    // Pages that should hide the bottom navigation dock because they have their own bottom action bars
+    const isStandalonePage =
+        pathname.includes("/add") ||
+        pathname.includes("/return") && pathname !== "/returns" ||
+        (pathname.startsWith("/outfits/") && pathname.split("/").length > 2) ||
+        (pathname.startsWith("/orders/") && pathname.split("/").length > 2) ||
+        pathname.startsWith("/admin/");
+
     const handleSignOut = async () => {
         try {
             await logOut();
@@ -58,7 +67,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 {
                     name: "Outfits",
                     href: "/outfits",
-                    icon: <FiGitMerge className="h-4 w-4" />
+                    icon: <Shirt className="h-4 w-4" />
                 },
                 {
                     name: "Orders",
@@ -68,7 +77,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 {
                     name: "Returns",
                     href: "/returns",
-                    icon: <FiShoppingBag className="w-4 h-4" />
+                    icon: <FiRotateCcw className="w-4 h-4" />
                 },
             ]
         }
@@ -219,10 +228,43 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </div>
             </aside>
 
-            {/* Main Wrapper */}
-            <div className="flex-1 flex flex-col h-screen overflow-hidden bg-[#F5F8FA]">
-                {/* Content Viewport */}
-                <main className="flex-1 overflow-y-auto pb-24 lg:pb-6">
+            {/* Main Wrapper - Root must be white to match status bar and prevent flicker */}
+            <div className="flex-1 flex flex-col h-[100dvh] overflow-hidden bg-white">
+                {/* Mobile Top Bar - For safe area status bar color */}
+                <div className="lg:hidden bg-white h-[env(safe-area-inset-top)] w-full shrink-0 z-50"></div>
+                {!isStandalonePage && (
+                    <header className="lg:hidden bg-white h-14 border-b border-gray-100 flex items-center justify-between px-5 shrink-0 z-40 sticky top-0">
+                        <div className="flex items-center">
+                            {pathname === "/" ? (
+                                <h1 className="font-extrabold text-xl text-gray-900 tracking-tight">VastraaOS</h1>
+                            ) : (
+                                <h1 className="font-extrabold text-xl text-gray-900 tracking-tight">
+                                    {pathname.startsWith("/outfits") ? "Inventory" :
+                                        pathname.startsWith("/availability") ? "Availability" :
+                                            pathname.startsWith("/orders") ? "Orders" :
+                                                pathname.startsWith("/returns") ? "Returns" :
+                                                    pathname.startsWith("/account") ? "Account" :
+                                                        pathname.includes("preparation") ? "Prep Guide" :
+                                                            pathname.includes("overview") ? "Overview" : "VastraaOS"}
+                                </h1>
+                            )}
+                        </div>
+
+                        {/* Account Menu - Top Right */}
+                        <Link href="/account" className="p-0.5 rounded-full border-2 border-transparent active:border-indigo-600 transition-all">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center">
+                                {user?.photoURL ? (
+                                    <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="text-xs font-bold text-gray-500 font-sans">{user?.displayName?.charAt(0) || "A"}</span>
+                                )}
+                            </div>
+                        </Link>
+                    </header>
+                )}
+
+                {/* Content Viewport - Grey background applied here only */}
+                <main className="flex-1 overflow-y-auto no-scrollbar pb-40 lg:pb-12 bg-[#F2F4F7]">
                     {children}
                 </main>
             </div>
@@ -231,50 +273,46 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <GlobalSearch />
 
             {/* Mobile Bottom Navigation - Floating Dock Style */}
-            <div className="lg:hidden fixed bottom-6 left-6 right-6 bg-white/95 backdrop-blur-2xl border border-gray-200 z-50 rounded-[2rem]">
-                <div className="flex justify-between items-center h-[64px] px-6">
-                    {/* Home */}
-                    <Link href="/" className="flex flex-col items-center justify-center group">
-                        <div className={`p-2 rounded-2xl transition-all duration-300 ${pathname === "/" ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
-                            <FiHome className="w-6 h-6 stroke-2" />
-                        </div>
-                    </Link>
-
-                    {/* Outfits */}
-                    <Link href="/outfits" className="flex flex-col items-center justify-center group">
-                        <div className={`p-2 rounded-2xl transition-all duration-300 ${pathname.startsWith("/outfits") ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
-                            <FiGitMerge className="w-6 h-6 stroke-2" />
-                        </div>
-                    </Link>
-
-                    {/* Check Availability */}
-                    <Link href="/availability" className="flex flex-col items-center justify-center group">
-                        <div className={`p-2 rounded-2xl transition-all duration-300 ${pathname === "/availability" ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
-                            <FiCalendar className="w-6 h-6 stroke-2" />
-                        </div>
-                    </Link>
-
-                    {/* Orders */}
-                    <Link href="/orders" className="flex flex-col items-center justify-center group">
-                        <div className={`p-2 rounded-2xl transition-all duration-300 ${pathname.startsWith("/orders") ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
-                            <FiShoppingBag className="w-6 h-6 stroke-2" />
-                        </div>
-                    </Link>
-
-                    {/* Account */}
-                    <Link href="/account" className="flex flex-col items-center justify-center group">
-                        <div className={`p-0.5 rounded-full transition-all duration-300 border-2 ${pathname === "/account" ? "border-indigo-600 scale-110" : "border-transparent"}`}>
-                            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex items-center justify-center">
-                                {user?.photoURL ? (
-                                    <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-xs font-bold text-gray-500">{user?.displayName?.charAt(0) || "A"}</span>
-                                )}
+            {!isStandalonePage && (
+                <div className="lg:hidden fixed bottom-6 left-6 right-6 bg-white/95 backdrop-blur-2xl border border-gray-200 z-50 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.1)] animate-slide-up">
+                    <div className="flex justify-between items-center h-[72px] px-6">
+                        {/* Home */}
+                        <Link href="/" className="flex flex-col items-center justify-center group">
+                            <div className={`p-3 rounded-2xl transition-all duration-300 ${pathname === "/" ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
+                                <FiHome className="w-6 h-6 stroke-2" />
                             </div>
-                        </div>
-                    </Link>
+                        </Link>
+
+                        {/* Outfits */}
+                        <Link href="/outfits" className="flex flex-col items-center justify-center group">
+                            <div className={`p-3 rounded-2xl transition-all duration-300 ${pathname.startsWith("/outfits") ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
+                                <Shirt className="w-6 h-6 stroke-2" />
+                            </div>
+                        </Link>
+
+                        {/* Check Availability */}
+                        <Link href="/availability" className="flex flex-col items-center justify-center group">
+                            <div className={`p-3 rounded-2xl transition-all duration-300 ${pathname === "/availability" ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
+                                <FiCalendar className="w-6 h-6 stroke-2" />
+                            </div>
+                        </Link>
+
+                        {/* Orders */}
+                        <Link href="/orders" className="flex flex-col items-center justify-center group">
+                            <div className={`p-3 rounded-2xl transition-all duration-300 ${pathname.startsWith("/orders") ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
+                                <FiShoppingBag className="w-6 h-6 stroke-2" />
+                            </div>
+                        </Link>
+
+                        {/* Returns */}
+                        <Link href="/returns" className="flex flex-col items-center justify-center group">
+                            <div className={`p-3 rounded-2xl transition-all duration-300 ${pathname.startsWith("/returns") ? "bg-indigo-50 text-indigo-600 scale-110" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"}`}>
+                                <FiRotateCcw className="w-6 h-6 stroke-2" />
+                            </div>
+                        </Link>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

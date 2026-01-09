@@ -2,25 +2,50 @@
 
 :root {
   --background: #ffffff;
+  color-scheme: light;
   --foreground: #171717;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 body {
-  font-weight: 400;
+  font-family: var(--font-inter), system-ui, sans-serif !important;
+  background-color: #ffffff !important;
+  font-weight: 500;
 }
 
-@theme inline {
+* {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-weight: 500;
+}
+
+@theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-mono: monospace;
+
+  /* Electric Blue Theme Overrides (Replacing Indigo) */
+  --color-indigo-50: #eff6ff;
+  --color-indigo-100: #dbeafe;
+  --color-indigo-200: #bfdbfe;
+  --color-indigo-300: #93c5fd;
+  --color-indigo-400: #60a5fa;
+  --color-indigo-500: #3b82f6;
+  --color-indigo-600: #0066FF;
+  /* The "Parking App" Electric Blue */
+  --color-indigo-700: #0052cc;
+  --color-indigo-800: #1e40af;
+  --color-indigo-900: #1e3a8a;
+
+  /* Map Blue to same incase used directly */
+  --color-blue-600: #0066FF;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #F2F4F7;
+    /* Force Light Theme Background for consistency */
+    --foreground: #171717;
   }
 }
 
@@ -55,8 +80,14 @@ body,
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Allow selection in inputs */
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 body {
-  font-family: 'Open Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -91,19 +122,35 @@ body {
   }
 }
 
-/* Premium Form Inputs */
-.form-input,
-.form-textarea,
-.form-select {
-  @apply block w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 text-sm font-medium placeholder-gray-400 shadow-sm transition-all duration-200 ease-in-out hover:border-indigo-300 hover:bg-white focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-600/10 focus:outline-none uppercase tracking-wide;
-}
+@layer components {
 
-.form-label {
-  @apply block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 ml-1;
+  /* Premium Form Inputs - Flat Design */
+  .form-input,
+  .form-textarea,
+  .form-select {
+    @apply block w-full rounded-[1.5rem] border border-gray-100 bg-white px-5 py-4 text-gray-900 text-base font-medium placeholder-gray-400 transition-all duration-200 ease-in-out focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 focus:outline-none caret-indigo-600;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  }
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center rounded-xl bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-indigo-500/20 transition-all duration-200 hover:bg-indigo-700 hover:shadow-indigo-500/30 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:pointer-events-none;
+  @apply inline-flex items-center justify-center rounded-xl bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-all duration-200 hover:bg-indigo-700 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:pointer-events-none;
+}
+
+/* Unified DatePicker Popup Styling - Flat Design */
+.react-datepicker__portal {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(4px);
+  transition: none !important;
+  z-index: 10001 !important;
+}
+
+.react-datepicker__portal .react-datepicker {
+  animation: iosSpring 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  transform-origin: center center;
+  border: 1px solid #e5e7eb !important;
+  /* border-gray-200 */
+  box-shadow: none !important;
 }
 
 @keyframes fadeIn {
@@ -245,6 +292,7 @@ body {
 .animate-slide-up {
   animation: slideUp 0.3s ease-out forwards;
 }
+
 /* Hide scrollbar for Chrome, Safari and Opera */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -252,6 +300,75 @@ body {
 
 /* Hide scrollbar for IE, Edge and Firefox */
 .no-scrollbar {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+/* React Datepicker Mobile Scaling */
+.react-datepicker {
+  font-family: inherit !important;
+  font-size: 1.1rem !important;
+  /* Increased font */
+  border-radius: 1.5rem !important;
+  border: none !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+}
+
+.react-datepicker__header {
+  background-color: #f8fafc !important;
+  /* bg-gray-50 */
+  border-bottom: 1px solid #e2e8f0 !important;
+  border-top-left-radius: 1rem !important;
+  border-top-right-radius: 1rem !important;
+  padding-top: 1rem !important;
+}
+
+.react-datepicker__triangle {
+  display: none;
+}
+
+.react-datepicker__day-name,
+.react-datepicker__day,
+.react-datepicker__time-name {
+  width: 3rem !important;
+  /* Bigger cells */
+  line-height: 3rem !important;
+  margin: 0.2rem !important;
+  border-radius: 0.75rem !important;
+  font-weight: 500 !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: #4f46e5 !important;
+  /* indigo-600 */
+  color: white !important;
+  font-weight: bold !important;
+}
+
+.react-datepicker__today-button {
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+  padding: 10px !important;
+  font-weight: bold !important;
+}
+
+/* iOS Popup Zoom Animation (Pronounced) */
+@keyframes iosSpring {
+  0% {
+    opacity: 1;
+    /* Keep fully visible as requested */
+    transform: scale(0.7);
+    /* Start smaller to make zoom obvious */
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-ios-popup {
+  animation: iosSpring 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }

@@ -9,7 +9,7 @@ export async function GET() {
         display: "standalone",
         orientation: "portrait",
         background_color: "#ffffff",
-        theme_color: "#2e31fb",
+        theme_color: "#ffffff",
         icons: [
             {
                 src: "/vercel.svg",

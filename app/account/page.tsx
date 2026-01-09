@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import { UserAuth } from "../../context/AuthContext";
 import { FiUser, FiLogOut, FiSettings, FiHelpCircle, FiChevronRight, FiBriefcase, FiPlus, FiCheck } from "react-icons/fi";
-import DashboardLayout from "../../components/DashboardLayout";
 import { useRouter } from "next/navigation";
 import { useToast } from "../../components/ToastProvider";
 
@@ -35,15 +34,10 @@ export default function AccountPage() {
     if (!mounted) return null;
 
     return (
-        <DashboardLayout>
-            {/* Sticky Header */}
-            <div className="sticky top-0 z-30 bg-white border-b border-gray-200 transition-all">
-                <div className="mx-auto max-w-md px-4 py-4 flex items-center justify-between gap-4">
-                    <h1 className="text-lg font-bold text-gray-900 tracking-tight leading-tight">Account</h1>
-                </div>
-            </div>
+        <>
 
-            <div className="max-w-md mx-auto pt-6 pb-24 px-4 bg-[#F5F8FA] min-h-full">
+
+            <div className="w-full px-5 md:px-8 lg:px-12 pt-6 pb-8 min-h-full">
 
                 {/* Profile Card */}
                 <div className="bg-white rounded-3xl p-6 border border-gray-100 flex items-center gap-5 relative overflow-hidden group">
@@ -158,6 +152,6 @@ export default function AccountPage() {
                     </div>
                 </div>
             </div>
-        </DashboardLayout >
+        </>
     );
 }

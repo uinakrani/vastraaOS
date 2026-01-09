@@ -4,17 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, query, where, getDocs, Timestamp, orderBy, limit } from "firebase/firestore";
 import { UserAuth } from "../context/AuthContext";
-import DashboardLayout from "../components/DashboardLayout";
 import { db } from "../firebaseConfig";
 import {
-  FiPlus,
   FiClock,
   FiShoppingBag,
   FiArrowRight,
   FiCalendar,
   FiTruck,
   FiBox,
-  FiCheckCircle
+  FiCheckCircle,
+  FiPlus
 } from "react-icons/fi";
 
 // Helper to format currency
@@ -146,170 +145,148 @@ export default function Dashboard() {
   };
 
   if (authLoading || loading) return (
-    <DashboardLayout>
-      <div className="flex h-[80vh] items-center justify-center">
-        <div className="animate-pulse flex flex-col items-center">
-          <div className="h-12 w-12 bg-gray-200 rounded-full mb-4"></div>
-          <div className="h-4 w-32 bg-gray-200 rounded"></div>
-        </div>
+    <div className="flex h-[80vh] items-center justify-center">
+      <div className="animate-pulse flex flex-col items-center">
+        <div className="h-12 w-12 bg-gray-200 rounded-full mb-4"></div>
+        <div className="h-4 w-32 bg-gray-200 rounded"></div>
       </div>
-    </DashboardLayout>
+    </div>
   );
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6 pb-24 animate-fade-in px-1 md:px-0">
+    <div className="space-y-6 pb-8 animate-fade-in px-5 md:px-8 lg:px-12">
 
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-2">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+        {/* Revenue Card */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 group-hover:scale-110 transition-transform duration-300">
+              <FiShoppingBag className="text-xl" />
+            </div>
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Monthly Revenue</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-medium text-gray-900">{formatINR(stats.revenue)}</h3>
+          </div>
+        </div>
+
+        {/* Active Rentals */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 group-hover:scale-110 transition-transform duration-300">
+              <FiClock className="text-xl" />
+            </div>
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Rentals</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-medium text-gray-900">{stats.activeRentals}</h3>
+            <span className="text-xs text-gray-400 font-medium">Orders</span>
+          </div>
+        </div>
+
+        {/* Today's Deliveries */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 group-hover:scale-110 transition-transform duration-300">
+              <FiTruck className="text-xl" />
+            </div>
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">To Deliver</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-medium text-gray-900">{stats.todayDeliveries}</h3>
+            <span className="text-xs text-gray-400 font-medium">Today</span>
+          </div>
+        </div>
+
+        {/* Today's Returns */}
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2.5 rounded-xl bg-orange-50 text-orange-600 group-hover:scale-110 transition-transform duration-300">
+              <FiCheckCircle className="text-xl" />
+            </div>
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Returns Due</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-medium text-gray-900">{stats.todayReturns}</h3>
+            <span className="text-xs text-gray-400 font-medium">Today</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Action Center & Tasks */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+
+        {/* Quick Actions */}
+        <div className="md:col-span-2 space-y-6">
           <div>
-            <h1 className="text-2xl font-light text-gray-900 tracking-tight">
-              {getTimeGreeting()}, <span className="font-medium">{user?.displayName?.split(' ')[0] || "Designer"}</span>
-            </h1>
-            <p className="text-sm text-gray-500 mt-1 font-medium">
-              Here's what's happening in <span className="text-indigo-600">{currentStudio?.studioName || "your studio"}</span> today.
-            </p>
+            <h3 className="text-lg font-medium text-gray-900 mb-4 px-1">Quick Actions</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <button onClick={() => router.push('/availability')} className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl transition-all active:scale-95 group">
+                <div className="h-12 w-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 mb-3 group-hover:-translate-y-1 transition-transform">
+                  <FiCalendar className="text-2xl" />
+                </div>
+                <span className="text-sm font-medium text-gray-700">Check Dates</span>
+              </button>
+
+              <button onClick={() => router.push('/outfits/add')} className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl transition-all active:scale-95 group">
+                <div className="h-12 w-12 bg-pink-50 rounded-2xl flex items-center justify-center text-pink-600 mb-3 group-hover:-translate-y-1 transition-transform">
+                  <FiPlus className="text-2xl" />
+                </div>
+                <span className="text-sm font-medium text-gray-700">Add Outfit</span>
+              </button>
+
+              <button onClick={() => router.push('/outfits')} className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl transition-all active:scale-95 group">
+                <div className="h-12 w-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-3 group-hover:-translate-y-1 transition-transform">
+                  <FiBox className="text-2xl" />
+                </div>
+                <span className="text-sm font-medium text-gray-700">Inventory</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => router.push('/orders/add')}
-            className="bg-[#0F172A] hover:bg-slate-800 text-white text-sm font-medium px-5 py-3 rounded-xl transition-all active:scale-95 flex items-center gap-2 self-start md:self-auto"
-          >
-            <FiPlus className="text-lg" /> New Order
-          </button>
+
+          {/* Banner / Tip Idea - Keeping it clean for now */}
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-          {/* Revenue Card */}
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 group-hover:scale-110 transition-transform duration-300">
-                <FiShoppingBag className="text-xl" />
-              </div>
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Monthly Revenue</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-medium text-gray-900">{formatINR(stats.revenue)}</h3>
-            </div>
+        {/* Today's Schedule */}
+        <div className="bg-white rounded-3xl p-6 border border-gray-100 h-fit">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-medium text-gray-900">Today's Schedule</h3>
+            <span className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 text-xs font-medium">
+              {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+            </span>
           </div>
 
-          {/* Active Rentals */}
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 group-hover:scale-110 transition-transform duration-300">
-                <FiClock className="text-xl" />
-              </div>
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Rentals</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-medium text-gray-900">{stats.activeRentals}</h3>
-              <span className="text-xs text-gray-400 font-medium">Orders</span>
-            </div>
-          </div>
+          <div className="space-y-0 relative">
+            {/* Timeline Line */}
+            <div className="absolute left-[19px] top-2 bottom-4 w-0.5 bg-gray-100"></div>
 
-          {/* Today's Deliveries */}
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 group-hover:scale-110 transition-transform duration-300">
-                <FiTruck className="text-xl" />
-              </div>
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">To Deliver</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-medium text-gray-900">{stats.todayDeliveries}</h3>
-              <span className="text-xs text-gray-400 font-medium">Today</span>
-            </div>
-          </div>
+            {todayTasks.length > 0 ? (
+              todayTasks.map((task, idx) => (
+                <div key={idx} className="relative pl-10 py-3 group cursor-pointer hover:bg-gray-50 rounded-lg transition-colors" onClick={() => router.push(`/orders/${task.id}`)}>
+                  {/* Dot */}
+                  <div className={`absolute left-3 top-5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${task.type === 'delivery' ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
 
-          {/* Today's Returns */}
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 transition-all duration-300 group">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-xl bg-orange-50 text-orange-600 group-hover:scale-110 transition-transform duration-300">
-                <FiCheckCircle className="text-xl" />
-              </div>
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Returns Due</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-medium text-gray-900">{stats.todayReturns}</h3>
-              <span className="text-xs text-gray-400 font-medium">Today</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Center & Tasks */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-
-          {/* Quick Actions */}
-          <div className="md:col-span-2 space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-900 mb-4 px-1">Quick Actions</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <button onClick={() => router.push('/availability')} className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl transition-all active:scale-95 group">
-                  <div className="h-12 w-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 mb-3 group-hover:-translate-y-1 transition-transform">
-                    <FiCalendar className="text-2xl" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-700">Check Dates</span>
-                </button>
-
-                <button onClick={() => router.push('/outfits/add')} className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl transition-all active:scale-95 group">
-                  <div className="h-12 w-12 bg-pink-50 rounded-2xl flex items-center justify-center text-pink-600 mb-3 group-hover:-translate-y-1 transition-transform">
-                    <FiPlus className="text-2xl" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-700">Add Outfit</span>
-                </button>
-
-                <button onClick={() => router.push('/outfits')} className="flex flex-col items-center justify-center p-6 bg-white border border-gray-100 rounded-2xl transition-all active:scale-95 group">
-                  <div className="h-12 w-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-3 group-hover:-translate-y-1 transition-transform">
-                    <FiBox className="text-2xl" />
-                  </div>
-                  <span className="text-sm font-medium text-gray-700">Inventory</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Banner / Tip Idea - Keeping it clean for now */}
-          </div>
-
-          {/* Today's Schedule */}
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 h-fit">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-gray-900">Today's Schedule</h3>
-              <span className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 text-xs font-medium">
-                {new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
-              </span>
-            </div>
-
-            <div className="space-y-0 relative">
-              {/* Timeline Line */}
-              <div className="absolute left-[19px] top-2 bottom-4 w-0.5 bg-gray-100"></div>
-
-              {todayTasks.length > 0 ? (
-                todayTasks.map((task, idx) => (
-                  <div key={idx} className="relative pl-10 py-3 group cursor-pointer hover:bg-gray-50 rounded-lg transition-colors" onClick={() => router.push(`/orders/${task.id}`)}>
-                    {/* Dot */}
-                    <div className={`absolute left-3 top-5 h-2.5 w-2.5 rounded-full ring-4 ring-white ${task.type === 'delivery' ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
-
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium text-gray-900">{task.customer}</span>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${task.type === 'delivery' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
-                          {task.type === 'delivery' ? 'Delivery' : 'Return'}
-                        </span>
-                        <span className="text-xs text-gray-400">{task.time}</span>
-                      </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900">{task.customer}</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${task.type === 'delivery' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {task.type === 'delivery' ? 'Delivery' : 'Return'}
+                      </span>
+                      <span className="text-xs text-gray-400">{task.time}</span>
                     </div>
                   </div>
-                ))
-              ) : (
-                <div className="py-8 text-center">
-                  <p className="text-sm text-gray-400 font-medium">No deliveries or returns today.</p>
                 </div>
-              )}
-            </div>
+              ))
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-sm text-gray-400 font-medium">No deliveries or returns today.</p>
+              </div>
+            )}
           </div>
         </div>
-
       </div>
-    </DashboardLayout>
+
+    </div>
   );
 }

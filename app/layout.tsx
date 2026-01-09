@@ -1,20 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { PWAInitialize } from "../components/PWAInitialize";
-import { NativePopupSystem } from "../components/NativePopupSystem";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthContextProvider } from "../context/AuthContext";
-import { ToastProvider } from "../components/ToastProvider";
+import ClientLayout from "../components/ClientLayout";
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["500", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
   title: "VastraaOS",
   description: "Outfit Rental Order Management and Delivery Handling System",
-  manifest: "/api/manifest",
+  manifest: "/manifest.json?v=3",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -25,10 +23,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 5,
-  userScalable: true,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
-  themeColor: "#2e31fb",
+  themeColor: "#ffffff",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -37,16 +36,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full bg-gray-100 text-gray-900">
-      <body className={`${inter.variable} antialiased h-full`}>
-        <div className="animate-fade-in duration-500 ease-in-out">
-          <AuthContextProvider>
-            <ToastProvider>
-              <PWAInitialize />
-              <NativePopupSystem />
-              {children}
-            </ToastProvider>
-          </AuthContextProvider>
+    <html lang="en" className={`h-full bg-white text-gray-900 ${inter.variable} font-sans`}>
+      <body className="antialiased h-full" style={inter.style}>
+        <div className="animate-fade-in duration-500 ease-in-out h-full w-full">
+          <ClientLayout>{children}</ClientLayout>
         </div>
       </body>
     </html>

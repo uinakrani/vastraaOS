@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, query, orderBy, doc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, doc, updateDoc, where } from "firebase/firestore";
 import { db } from "../../firebaseConfig"; // Adjust path as needed
-import DashboardLayout from "../../components/DashboardLayout";
+import { UserAuth } from "../../context/AuthContext";
 import { formatINR } from "../../utils/format";
 import { isSameDay, addDays, startOfDay, format, differenceInDays } from "date-fns";
 import { FiCalendar, FiUser, FiPhone, FiLayers, FiXCircle, FiClock, FiDollarSign, FiSearch, FiAlertTriangle, FiX } from "react-icons/fi";
@@ -13,6 +13,7 @@ import { logOrderActivity } from "../../lib/activityLogger";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function OrdersList() {
+  const { currentStudio } = UserAuth();
   const [orders, setOrders] = useState<any[]>([]);
   const [todayOrders, setTodayOrders] = useState<any[]>([]);
   const [tomorrowOrders, setTomorrowOrders] = useState<any[]>([]);
@@ -36,12 +37,40 @@ export default function OrdersList() {
   const { showToast } = useToast();
 
   const fetchOrders = async () => {
-    setLoading(true);
     try {
+      if (!currentStudio?.studioId) return;
       const ordersCollectionRef = collection(db, "orders");
-      const q = query(ordersCollectionRef, orderBy("createdAt", "desc"));
-      const querySnapshot = await getDocs(q);
-      const ordersData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+      let ordersData: any[] = [];
+
+      try {
+        const q = query(
+          ordersCollectionRef,
+          where("studioId", "==", currentStudio.studioId),
+          orderBy("createdAt", "desc")
+        );
+        const querySnapshot = await getDocs(q);
+        ordersData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      } catch (indexError: any) {
+        if (indexError.message?.includes("index") || indexError.code === "failed-precondition") {
+          console.warn("Firestore index missing for orders, falling back to client-side sort.");
+          const fallbackQ = query(
+            ordersCollectionRef,
+            where("studioId", "==", currentStudio.studioId)
+          );
+          const querySnapshot = await getDocs(fallbackQ);
+          ordersData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+          // Client side sort
+          ordersData.sort((a, b) => {
+            const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+            const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+            return timeB - timeA;
+          });
+        } else {
+          throw indexError;
+        }
+      }
 
       // Filter logic
       const today = new Date();
@@ -113,8 +142,10 @@ export default function OrdersList() {
   }, [searchQuery, orders]);
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (currentStudio?.studioId) {
+      fetchOrders();
+    }
+  }, [currentStudio?.studioId]);
 
   const handleCancelOrder = (orderId: string) => {
     // If inside detail view, we might need to close it first if we want strict flow,
@@ -175,7 +206,7 @@ export default function OrdersList() {
     }
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
         {data.map((order) => {
           const totalAmount = calculateTotalAmount(order.outfitItems);
           const outfitCount = order.outfitItems?.length || 0;
@@ -187,39 +218,41 @@ export default function OrdersList() {
               key={order.id}
               whileTap={{ scale: 0.98 }}
               onClick={() => { setSelectedId(order.id); setSelectedOrder(order); }}
-              className="bg-white rounded-xl border border-gray-200 p-3 cursor-pointer hover:border-indigo-300 transition-colors group relative overflow-hidden"
+              className="bg-white rounded-[1.5rem] border border-gray-100 p-4 cursor-pointer active:border-indigo-600 transition-colors group relative overflow-hidden"
             >
-              <div className="flex justify-between items-start mb-2">
+              <div className="flex justify-between items-start mb-3">
                 <div className="flex flex-col">
-                  <h3 className="text-sm font-bold text-gray-900 leading-tight">{order.customerName}</h3>
-                  <p className="text-[10px] text-gray-500 font-medium mt-0.5">{order.customerMobile}</p>
+                  <h3 className="text-base font-bold text-gray-900 leading-tight">{order.customerName}</h3>
+                  <p className="text-xs text-gray-400 font-medium mt-0.5 tracking-wide">{order.customerMobile}</p>
                 </div>
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide
-                      ${order.status === "pending" ? "bg-amber-100 text-amber-800"
-                    : order.status === "processing" ? "bg-blue-100 text-blue-800"
-                      : order.status === "cancelled" ? "bg-red-100 text-red-800"
-                        : "bg-green-100 text-green-800"
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide
+                      ${order.status === "pending" ? "bg-amber-50 text-amber-600 border border-amber-100"
+                    : order.status === "processing" ? "bg-blue-50 text-blue-600 border border-blue-100"
+                      : order.status === "cancelled" ? "bg-red-50 text-red-600 border border-red-100"
+                        : "bg-emerald-50 text-emerald-600 border border-emerald-100"
                   }`}>
                   {order.status}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 mb-2 bg-gray-50 p-1.5 rounded-lg">
-                <FiClock className="text-gray-400 w-3 h-3" />
-                <span className="text-[10px] font-medium text-gray-600">{calculateDuration(order.startDate, order.endDate)}</span>
+              <div className="flex items-center gap-2 mb-4 bg-gray-50 p-2 rounded-xl border border-gray-100/50">
+                <div className="p-1 bg-white rounded-lg shadow-sm">
+                  <FiClock className="text-indigo-600 w-3 h-3" />
+                </div>
+                <span className="text-xs font-semibold text-gray-600">{calculateDuration(order.startDate, order.endDate)}</span>
               </div>
 
               <div className="flex justify-between items-end">
                 <div className="flex flex-col">
-                  <span className="text-[9px] uppercase text-gray-400 font-bold tracking-wider mb-0.5">Includes</span>
-                  <span className="text-xs font-medium text-gray-800 flex items-center gap-1">
-                    <FiLayers className="w-3 h-3 text-indigo-500" />
+                  <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-1">Includes</span>
+                  <span className="text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-600"></div>
                     {displayOutfit}
                   </span>
                 </div>
                 <div className="flex flex-col items-end">
-                  <span className="text-[9px] uppercase text-gray-400 font-bold tracking-wider mb-0.5">Rent</span>
-                  <span className="text-sm font-bold text-gray-900">{formatINR(totalAmount)}</span>
+                  <span className="text-[10px] uppercase text-gray-400 font-bold tracking-wider mb-1">Rent</span>
+                  <span className="text-lg font-bold text-gray-900">{formatINR(totalAmount)}</span>
                 </div>
               </div>
             </motion.div>
@@ -230,75 +263,67 @@ export default function OrdersList() {
   };
 
   return (
-    <DashboardLayout>
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 transition-all">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 tracking-tight leading-tight">Orders</h1>
-              <p className="text-xs text-gray-500 font-medium">Daily Rentals</p>
-            </div>
-          </div>
+    <>
 
-          <Link href="/orders/add" className="flex items-center justify-center w-9 h-9 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all font-bold text-xl flex-shrink-0" title="Create Order">
-            <span>+</span>
-          </Link>
-        </div>
-      </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
-        {/* Search Bar */}
-        <div className="mb-6 relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <FiSearch className="h-4 w-4 text-gray-400" />
+      {/* Mobile Floating Action Button (FAB) */}
+      <Link href="/orders/add" className="fixed bottom-24 right-6 md:hidden z-40 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex items-center justify-center hover:scale-105 active:scale-95 transition-transform">
+        <span className="text-3xl font-bold mb-1">+</span>
+      </Link>
+
+      <div className="w-full px-5 py-6 md:px-8 lg:px-12">
+        {/* Search Bar - Native Input Style */}
+        <div className="mb-8 relative group">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <FiSearch className="h-5 w-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
           </div>
           <input
             type="text"
             placeholder="Search orders..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="block w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm transition-colors"
+            className="form-input pl-12"
           />
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl mb-6 max-w-md">
+        {/* Tab Navigation - Apple Segmented Control Style */}
+        <div className="flex p-1.5 bg-gray-200/50 rounded-2xl mb-8 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('today')}
-            className={`flex-1 flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${activeTab === 'today'
-              ? 'bg-white text-indigo-600'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+            className={`flex-1 min-w-[80px] flex items-center justify-center py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-300 ${activeTab === 'today'
+              ? 'bg-white text-indigo-600 shadow-sm scale-100'
+              : 'text-gray-500 hover:text-gray-700 scale-95'
               }`}
           >
-            Today {todayOrders.length > 0 && <span className="ml-1 bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full text-[9px]">{todayOrders.length}</span>}
+            Today {todayOrders.length > 0 && <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] ${activeTab === 'today' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-300 text-gray-600'}`}>{todayOrders.length}</span>}
           </button>
           <button
             onClick={() => setActiveTab('tomorrow')}
-            className={`flex-1 flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${activeTab === 'tomorrow'
-              ? 'bg-white text-indigo-600'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+            className={`flex-1 min-w-[80px] flex items-center justify-center py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-300 ${activeTab === 'tomorrow'
+              ? 'bg-white text-indigo-600 shadow-sm scale-100'
+              : 'text-gray-500 hover:text-gray-700 scale-95'
               }`}
           >
-            Tomorrow {tomorrowOrders.length > 0 && <span className="ml-1 bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full text-[9px]">{tomorrowOrders.length}</span>}
+            Tmrw {tomorrowOrders.length > 0 && <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] ${activeTab === 'tomorrow' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-300 text-gray-600'}`}>{tomorrowOrders.length}</span>}
           </button>
           <button
             onClick={() => setActiveTab('others')}
-            className={`flex-1 flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${activeTab === 'others'
-              ? 'bg-white text-indigo-600'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+            className={`flex-1 min-w-[80px] flex items-center justify-center py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-300 ${activeTab === 'others'
+              ? 'bg-white text-indigo-600 shadow-sm scale-100'
+              : 'text-gray-500 hover:text-gray-700 scale-95'
               }`}
           >
-            Others
+            All
           </button>
           <button
             onClick={() => setActiveTab('cancelled')}
-            className={`flex-1 flex items-center justify-center py-1.5 px-3 rounded-lg text-xs font-bold uppercase tracking-wide transition-all ${activeTab === 'cancelled'
-              ? 'bg-white text-indigo-600'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+            className={`flex-1 min-w-[80px] flex items-center justify-center py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wide transition-all duration-300 ${activeTab === 'cancelled'
+              ? 'bg-white text-red-600 shadow-sm scale-100'
+              : 'text-gray-500 hover:text-gray-700 scale-95'
               }`}
           >
-            Cancelled {cancelledOrders.length > 0 && <span className="ml-1 bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full text-[9px]">{cancelledOrders.length}</span>}
+            <span className={activeTab === 'cancelled' ? '' : 'text-xs'}>Cancelled</span>
+            {cancelledOrders.length > 0 && <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] ${activeTab === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-gray-300 text-gray-600'}`}>{cancelledOrders.length}</span>}
           </button>
         </div>
 
@@ -417,7 +442,7 @@ export default function OrdersList() {
                           {item.size && <p className="text-xs text-gray-500 mt-1">Size: {item.size}</p>}
                           {item.notes && (
                             <div className="mt-2 text-xs bg-yellow-50 text-yellow-800 p-2 rounded border border-yellow-100 italic">
-                              "{item.notes}"
+                              &quot;{item.notes}&quot;
                             </div>
                           )}
                         </div>
@@ -501,6 +526,6 @@ export default function OrdersList() {
           </div>
         )
       }
-    </DashboardLayout >
+    </ >
   );
 }

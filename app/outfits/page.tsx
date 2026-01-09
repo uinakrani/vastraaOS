@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import DashboardLayout from "../../components/DashboardLayout";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "../../components/ToastProvider";
-import { collection, getDocs, query, orderBy, limit, startAfter, QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, limit, startAfter, QueryDocumentSnapshot, where } from "firebase/firestore";
 import Image from "next/image";
 import { db } from "../../firebaseConfig";
 import { formatINR } from "../../utils/format";
@@ -12,7 +11,7 @@ import { UserAuth } from "../../context/AuthContext";
 import { FiRefreshCw, FiSearch, FiPlus } from "react-icons/fi";
 
 export default function OutfitsList() {
-  const { user, loading: authLoading } = UserAuth();
+  const { user, loading: authLoading, currentStudio } = UserAuth();
   const [outfits, setOutfits] = useState<any[]>([]);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -39,46 +38,82 @@ export default function OutfitsList() {
         }
       }
 
-      // LIMIT 50
+      if (!currentStudio?.studioId) return;
+
       const outfitsCollectionRef = collection(db, "outfits");
-      let q = query(outfitsCollectionRef, orderBy("createdAt", "desc"), limit(50));
 
-      if (isLoadMore && lastDoc) {
-        q = query(outfitsCollectionRef, orderBy("createdAt", "desc"), startAfter(lastDoc), limit(50));
-      }
+      // Attempt 1: Ordered query (requires composite index)
+      let q;
+      try {
+        q = query(
+          outfitsCollectionRef,
+          where("studioId", "==", currentStudio.studioId),
+          orderBy("createdAt", "desc"),
+          limit(50)
+        );
 
-      const querySnapshot = await getDocs(q);
-      const newOutfits = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+        if (isLoadMore && lastDoc) {
+          q = query(
+            outfitsCollectionRef,
+            where("studioId", "==", currentStudio.studioId),
+            orderBy("createdAt", "desc"),
+            startAfter(lastDoc),
+            limit(50)
+          );
+        }
 
-      setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
-      if (querySnapshot.docs.length < 50) {
-        setHasMore(false);
-      }
+        const querySnapshot = await getDocs(q);
+        const newOutfits = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-      if (isLoadMore) {
-        setOutfits((prev) => {
-          // Dedupe just in case
-          const existingIds = new Set(prev.map(o => o.id));
-          const uniqueNew = newOutfits.filter(o => !existingIds.has(o.id));
-          return [...prev, ...uniqueNew];
-        });
-      } else {
-        setOutfits(newOutfits);
-        // Only cache first page or reasonable amount
-        localStorage.setItem("outfits_list_cache", JSON.stringify(newOutfits));
+        setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1] || null);
+        if (querySnapshot.docs.length < 50) {
+          setHasMore(false);
+        }
+
+        if (isLoadMore) {
+          setOutfits((prev) => {
+            const existingIds = new Set(prev.map(o => o.id));
+            const uniqueNew = newOutfits.filter(o => !existingIds.has(o.id));
+            return [...prev, ...uniqueNew];
+          });
+        } else {
+          setOutfits(newOutfits);
+          localStorage.setItem("outfits_list_cache", JSON.stringify(newOutfits));
+        }
+      } catch (indexError: any) {
+        // Fallback: If index is missing, fetch without order and sort client-side
+        if (indexError.message?.includes("index") || indexError.code === "failed-precondition") {
+          console.warn("Firestore index missing, falling back to client-side sort.");
+
+          const fallbackQ = query(
+            outfitsCollectionRef,
+            where("studioId", "==", currentStudio.studioId),
+            limit(200) // Fetch more to compensate for lack of pagination
+          );
+
+          const querySnapshot = await getDocs(fallbackQ);
+          const outfitsData = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+          // Sort client side
+          outfitsData.sort((a: any, b: any) => {
+            const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt || 0);
+            const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt || 0);
+            return timeB - timeA;
+          });
+
+          setOutfits(outfitsData);
+          setHasMore(false); // Disable infinite scroll in fallback mode
+        } else {
+          throw indexError; // Re-throw if it's not an index error
+        }
       }
 
     } catch (err: any) {
       console.error("Error fetching outfits: ", err);
-      let errorMessage = "Failed to load outfits: Unknown error";
-      if (err.message) errorMessage = `Error: ${err.message}`;
-      showToast(errorMessage, "error");
+      showToast(err.message || "Failed to load outfits", "error");
     } finally {
-      if (isLoadMore) {
-        setLoadingMore(false);
-      } else {
-        setLoading(false);
-      }
+      setLoadingMore(false);
+      setLoading(false);
     }
   }, [lastDoc, loadingMore, loading, outfits.length]); // Dependencies for callback
 
@@ -119,11 +154,11 @@ export default function OutfitsList() {
       }
     }
 
-    // 2. Fetch fresh data when Auth is ready
-    if (!authLoading && user) {
+    // 2. Fetch fresh data when Auth and Studio are ready
+    if (!authLoading && user && currentStudio?.studioId) {
       fetchOutfits().catch(e => console.warn("Fetch interrupted", e));
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, currentStudio?.studioId]);
 
   // Client-side filtering for Search AND Archive status
   // We filter out 'Archived' items from the main list view unless specifically searching for them (optional, but keep it simple: hide archived)
@@ -139,29 +174,14 @@ export default function OutfitsList() {
   );
 
   return (
-    <DashboardLayout>
+    <>
 
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-200">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 tracking-tight leading-tight">Outfits</h1>
-              <p className="text-xs text-gray-500 font-medium">Collection</p>
-            </div>
-          </div>
+      {/* Mobile Floating Action Button (FAB) for adding outfits */}
+      <Link href="/outfits/add" className="fixed bottom-24 right-6 md:hidden z-40 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex items-center justify-center hover:scale-105 active:scale-95 transition-transform" title="Add Outfit">
+        <FiPlus className="text-3xl font-bold" />
+      </Link>
 
-          <Link
-            href="/outfits/add"
-            className="flex items-center justify-center w-9 h-9 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all font-bold text-xl flex-shrink-0"
-            title="Add Outfit"
-          >
-            <span>+</span>
-          </Link>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
+      <div className="w-full px-5 py-6 md:px-8 lg:px-12">
         {/* Search Bar */}
         <div className="mb-6 relative h-10">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -199,6 +219,7 @@ export default function OutfitsList() {
                         src={outfit.imageUrl}
                         alt={outfit.name}
                         fill
+                        unoptimized
                         className="object-cover transition-transform duration-500 group-hover:scale-105"
                         sizes="(max-width: 768px) 33vw, 20vw"
                       />
@@ -232,6 +253,6 @@ export default function OutfitsList() {
           </>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

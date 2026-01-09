@@ -1,11 +1,12 @@
 "use client";
 import React, { useState } from "react";
-import DashboardLayout from "../../../components/DashboardLayout";
 import { collection, getDocs, deleteDoc, doc, writeBatch } from "firebase/firestore";
 import { db } from "../../../firebaseConfig";
-import { FiTrash2, FiAlertTriangle, FiCheckCircle, FiLoader } from "react-icons/fi";
+import { FiTrash2, FiAlertTriangle, FiCheckCircle, FiLoader, FiArrowLeft } from "react-icons/fi";
+import { useRouter } from "next/navigation";
 
 export default function AdminResetPage() {
+    const router = useRouter();
     const [confirmText, setConfirmText] = useState("");
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState<string>("");
@@ -100,16 +101,19 @@ export default function AdminResetPage() {
     };
 
     return (
-        <DashboardLayout>
-            <div className="max-w-2xl mx-auto py-12 px-6">
+        <>
+            <div className="w-full px-5 md:px-8 lg:px-12 py-12">
                 <div className="bg-white rounded-xl shadow-lg border border-red-100 overflow-hidden">
                     <div className="bg-red-50 p-6 border-b border-red-100 flex items-center gap-4">
                         <div className="p-3 bg-red-100 rounded-full text-red-600">
                             <FiAlertTriangle className="w-8 h-8" />
                         </div>
+                        <button onClick={() => router.back()} className="p-2 -ml-2 text-red-400 hover:text-red-900 rounded-full hover:bg-red-100 transition-colors">
+                            <FiArrowLeft className="w-6 h-6" />
+                        </button>
                         <div>
                             <h1 className="text-2xl font-bold text-red-900">Danger Zone: System Reset</h1>
-                            <p className="text-red-700 text-sm">Permanently delete all business data.</p>
+                            <p className="text-red-700 text-sm font-bold">Permanently delete all business data.</p>
                         </div>
                     </div>
 
@@ -123,7 +127,7 @@ export default function AdminResetPage() {
                             </ul>
                         </p>
 
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-500">
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm font-medium text-gray-500">
                             <strong>Note:</strong> Firebase Authentication users (logins) are NOT deleted. You will remain logged in.
                         </div>
 
@@ -181,6 +185,6 @@ export default function AdminResetPage() {
                     </div>
                 </div>
             </div>
-        </DashboardLayout>
+        </>
     );
 }

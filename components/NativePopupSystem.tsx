@@ -107,11 +107,10 @@ export const NativePopupSystem = () => {
                 <div
                     key={popup.id}
                     className={`
-            relative w-full max-w-xs bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl p-6 text-center transform transition-all duration-300
-            ${popup.closing ? 'scale-90 opacity-0 translate-y-4' : 'scale-100 opacity-100 translate-y-0'}
+            relative w-full max-w-xs bg-white/90 backdrop-blur-xl rounded-2xl border border-gray-200 p-6 text-center transform transition-all duration-300
+            ${popup.closing ? 'scale-90 opacity-0 translate-y-4' : 'scale-100 opacity-100 translate-y-0 animate-ios-popup'}
             ${index !== popups.length - 1 ? 'hidden' : ''} /* Only show top one */
           `}
-                    style={{ animation: !popup.closing ? 'scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' : '' }}
                 >
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gray-100">
                         {popup.type === 'success' && <Check className="h-8 w-8 text-green-600" />}
@@ -132,13 +131,13 @@ export const NativePopupSystem = () => {
                             <>
                                 <button
                                     onClick={() => closePopup(popup.id, false)}
-                                    className="flex-1 px-4 py-3 bg-gray-200 text-gray-800 rounded-xl font-semibold text-sm active:scale-95 transition-transform"
+                                    className="flex-1 px-4 py-3 bg-gray-100 text-gray-800 rounded-xl font-semibold text-sm active:scale-95 transition-transform"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={() => closePopup(popup.id, true)}
-                                    className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm active:scale-95 transition-transform shadow-lg shadow-indigo-500/30"
+                                    className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-semibold text-sm active:scale-95 transition-transform"
                                 >
                                     Confirm
                                 </button>

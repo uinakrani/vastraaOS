@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
     format,
     addMonths,
@@ -14,7 +15,8 @@ import {
     addDays,
     eachDayOfInterval,
     isAfter,
-    isBefore
+    isBefore,
+    startOfDay
 } from 'date-fns';
 import { FiChevronLeft, FiChevronRight, FiInfo } from 'react-icons/fi';
 
@@ -33,261 +35,337 @@ interface AvailabilityCalendarProps {
     totalSizes?: string[];
     sizeQuantities?: { [key: string]: number };
     orientation?: 'horizontal' | 'vertical';
+    referenceDate?: Date;
 }
 
-const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({ events, totalSizes = [], sizeQuantities = {}, orientation = 'horizontal' }) => {
+const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({
+    events,
+    totalSizes = [],
+    sizeQuantities = {},
+    orientation = 'horizontal',
+    referenceDate
+}) => {
     const [tooltipData, setTooltipData] = useState<{ x: number; y: number; content: React.ReactNode } | null>(null);
-    const [currentMonth, setCurrentMonth] = useState(new Date());
-    const scrollContainerRef = React.useRef<HTMLDivElement>(null);
-    const [isDragging, setIsDragging] = useState(false);
-    const [startX, setStartX] = useState(0);
-    const [scrollLeft, setScrollLeft] = useState(0);
+    const startDate = useMemo(() => startOfMonth(referenceDate || new Date()), [referenceDate]);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    const [activeMonthIndex, setActiveMonthIndex] = useState(0);
+    const [selectedSizeFilter, setSelectedSizeFilter] = useState<string | null>(null);
 
-    const handleMouseEnterNode = (e: React.MouseEvent, content: React.ReactNode) => {
+    // Optimized for Mobile: Tapping a day toggles the tooltip
+    const handleDayInteraction = (e: React.MouseEvent, content: React.ReactNode) => {
         const rect = e.currentTarget.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const topY = rect.top;
+
+        // If clicking the same day, close it
+        if (tooltipData && Math.abs(tooltipData.x - centerX) < 5) {
+            setTooltipData(null);
+            return;
+        }
+
         setTooltipData({
-            x: rect.left + rect.width / 2,
-            y: rect.top,
+            x: centerX,
+            y: topY,
             content: content
         });
     };
 
-    const handleMouseLeaveNode = () => {
-        setTooltipData(null);
-    };
+    // Smart Positioning Effect
+    useEffect(() => {
+        if (tooltipData && tooltipRef.current) {
+            const tooltip = tooltipRef.current;
 
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (!scrollContainerRef.current) return;
-        setIsDragging(true);
-        setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
-        setScrollLeft(scrollContainerRef.current.scrollLeft);
-        scrollContainerRef.current.style.cursor = 'grabbing';
-    };
+            // 1. Initial Position: Center it above the anchor
+            const initialTransform = 'translate(-50%, -100%) translateY(-12px)';
+            tooltip.style.transform = initialTransform;
+            tooltip.style.opacity = '0';
+            tooltip.style.visibility = 'visible';
 
-    const handleMouseLeave = () => {
-        setIsDragging(false);
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.style.cursor = 'grab';
+            // 2. Measure & Adjust (Wait one frame to ensure DOM is ready)
+            requestAnimationFrame(() => {
+                if (!tooltipRef.current) return;
+
+                const rect = tooltip.getBoundingClientRect();
+                const padding = 16;
+                let xOffset = 0;
+                let translateY = '-100%';
+                let yGap = '-12px';
+
+                // Horizontal Adjustment
+                if (rect.left < padding) {
+                    xOffset = padding - rect.left;
+                } else if (rect.right > window.innerWidth - padding) {
+                    xOffset = (window.innerWidth - padding) - rect.right;
+                }
+
+                // Vertical Adjustment (Flip IF off top)
+                if (rect.top < padding) {
+                    translateY = '0%';
+                    yGap = '12px';
+                    // Re-measure after vertical flip to see if we now overflow bottom
+                    // (But usually calendars are higher up on screen, so this is safe)
+                }
+
+                tooltip.style.transform = `translate(calc(-50% + ${xOffset}px), ${translateY}) translateY(${yGap})`;
+                tooltip.style.opacity = '1';
+                tooltip.style.transition = 'opacity 0.2s ease-out, transform 0.2s ease-out';
+            });
+        }
+    }, [tooltipData]);
+
+    // Close tooltip on scroll or click away
+    useEffect(() => {
+        const handleInteraction = () => setTooltipData(null);
+        window.addEventListener('scroll', handleInteraction, true);
+        const handleGlobalClick = (e: MouseEvent) => {
+            if (!(e.target as HTMLElement).closest('[data-day-cell]')) {
+                setTooltipData(null);
+            }
+        };
+        window.addEventListener('click', handleGlobalClick);
+        return () => {
+            window.removeEventListener('scroll', handleInteraction, true);
+            window.removeEventListener('click', handleGlobalClick);
+        };
+    }, []);
+
+    // Reset scroll and index when startDate changes (e.g. via parent date selection)
+    useEffect(() => {
+        setActiveMonthIndex(0);
+        if (scrollRef.current) {
+            scrollRef.current.scrollLeft = 0;
+        }
+    }, [startDate]);
+
+    const handleScroll = () => {
+        if (scrollRef.current) {
+            const index = Math.round(scrollRef.current.scrollLeft / scrollRef.current.clientWidth);
+            setActiveMonthIndex(index);
         }
     };
 
-    const handleMouseUp = () => {
-        setIsDragging(false);
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.style.cursor = 'grab';
-        }
+    const renderSizeFilter = () => {
+        if (totalSizes.length <= 1) return null;
+        return (
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide px-4 mb-6 -mt-2 pb-2">
+                <button
+                    onClick={() => setSelectedSizeFilter(null)}
+                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all
+                        ${!selectedSizeFilter ? 'bg-[#0F172A] text-white shadow-lg' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                >
+                    ALL SIZES
+                </button>
+                {totalSizes.map(size => (
+                    <button
+                        key={size}
+                        onClick={() => setSelectedSizeFilter(size)}
+                        className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all
+                            ${selectedSizeFilter === size ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                    >
+                        SIZE {size}
+                    </button>
+                ))}
+            </div>
+        );
     };
-
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!isDragging || !scrollContainerRef.current) return;
-        e.preventDefault();
-        const x = e.pageX - scrollContainerRef.current.offsetLeft;
-        const walk = (x - startX) * 2; // Scroll-fast
-        scrollContainerRef.current.scrollLeft = scrollLeft - walk;
-    };
-
-    const nextMonth = addMonths(currentMonth, 1);
-    const nextNextMonth = addMonths(currentMonth, 2);
-
-    const onNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
-    const onPrevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
 
     const renderHeader = (date: Date) => {
         return (
-            <div className="flex justify-center mb-2">
-                <span className="text-sm font-bold text-gray-800">
-                    {format(date, "MMMM")}
+            <div className="flex justify-between items-center mb-6 px-4">
+                <span className="text-2xl font-black text-[#0F172A] tracking-tighter">
+                    {format(date, "MMMM")} <span className="text-gray-300 ml-1 font-bold">{format(date, "yyyy")}</span>
                 </span>
+                <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest animate-pulse">Swipe</span>
+                    <div className="flex gap-1">
+                        <div className="w-1 h-1 rounded-full bg-indigo-500"></div>
+                        <div className="w-1 h-1 rounded-full bg-indigo-300"></div>
+                        <div className="w-1 h-1 rounded-full bg-indigo-100"></div>
+                    </div>
+                </div>
             </div>
         );
     };
 
     const renderDays = () => {
-        const dateFormat = "EEEEE"; // M, T, W, T, F, S, S (Single letter)
+        const dateFormat = "EEEEE";
         const days = [];
-        let startDate = startOfWeek(currentMonth); // Default starts on Sunday, generally fine or adjust to Monday
+        let start = startOfWeek(new Date());
 
         for (let i = 0; i < 7; i++) {
-            // Adjust labels if you want Monday start styling
             days.push(
-                <div className="text-center text-[10px] font-medium text-gray-500 py-0.5" key={i}>
-                    {format(addDays(startDate, i), dateFormat)}
+                <div className="text-center text-[11px] font-black text-gray-300 py-2 uppercase tracking-[0.2em]" key={i}>
+                    {format(addDays(start, i), dateFormat)}
                 </div>
             );
         }
-        return <div className="grid grid-cols-7 mb-1">{days}</div>;
+        return <div className="grid grid-cols-7 mb-4 px-2">{days}</div>;
     };
 
-    // Reuse nice logic for rendering a month's grid
     const renderMonthGrid = (monthDate: Date) => {
         const monthStart = startOfMonth(monthDate);
         const monthEnd = endOfMonth(monthStart);
-        const startDate = startOfWeek(monthStart);
-        const endDate = endOfWeek(monthEnd);
+        const gridStart = startOfWeek(monthStart);
+        const gridEnd = endOfWeek(monthEnd);
 
-        const dateFormat = "d";
-        // Gather all days
-        const daysInGrid = eachDayOfInterval({ start: startDate, end: endDate });
+        const daysInGrid = eachDayOfInterval({ start: gridStart, end: gridEnd });
 
         return (
-            <div className="grid grid-cols-7 gap-y-1 gap-x-1">
+            <div className="grid grid-cols-7 gap-2 px-2 pb-6">
                 {daysInGrid.map((dayItem, idx) => {
                     if (!isSameMonth(dayItem, monthDate)) {
-                        return <div key={idx}></div>; // Empty slot for days outside month to match screenshot clean look
+                        return <div key={idx} className="aspect-square opacity-0"></div>;
                     }
 
-                    // Check status
-                    let containerClass = "bg-white border-gray-100 text-gray-700 hover:border-gray-300"; // Default available
-                    let hasBooking = false;
-                    let isFullConfig = false;
+                    const dayKey = format(dayItem, 'yyyy-MM-dd');
 
-                    let isAmFull = false;
-                    let isPmFull = false;
-
-                    const bookedSizesMapAM = new Map<string, number>();
-                    const bookedSizesMapPM = new Map<string, number>();
+                    // Advanced Availability Tracking
+                    const amBookedCounts = new Map<string, number>();
+                    const pmBookedCounts = new Map<string, number>();
+                    let amOccupied = false;
+                    let pmOccupied = false;
 
                     events.forEach(event => {
-                        if ((isSameDay(dayItem, event.start) || dayItem > event.start) &&
-                            (isSameDay(dayItem, event.end) || dayItem < event.end)) {
+                        const eventStartKey = format(event.start, 'yyyy-MM-dd');
+                        const eventEndKey = format(event.end, 'yyyy-MM-dd');
 
-                            hasBooking = true;
-
-                            // Determine which slots this event occupies
+                        // Timezone-safe date matching
+                        if (dayKey >= eventStartKey && dayKey <= eventEndKey) {
                             let occupiesAM = true;
                             let occupiesPM = true;
 
-                            if (isSameDay(dayItem, event.start)) {
-                                if (event.pickupSlot === 'Afternoon') occupiesAM = false;
-                            }
-                            if (isSameDay(dayItem, event.end)) {
-                                if (event.returnSlot === 'Morning') occupiesPM = false;
-                            }
+                            if (dayKey === eventStartKey && event.pickupSlot === 'Afternoon') occupiesAM = false;
+                            if (dayKey === eventEndKey && event.returnSlot === 'Morning') occupiesPM = false;
 
-                            // Register usage
+                            if (occupiesAM) amOccupied = true;
+                            if (occupiesPM) pmOccupied = true;
+
                             if (event.bookedSizes && event.bookedSizes.length > 0) {
                                 event.bookedSizes.forEach(s => {
-                                    if (occupiesAM) bookedSizesMapAM.set(s, (bookedSizesMapAM.get(s) || 0) + 1);
-                                    if (occupiesPM) bookedSizesMapPM.set(s, (bookedSizesMapPM.get(s) || 0) + 1);
+                                    if (occupiesAM) amBookedCounts.set(s, (amBookedCounts.get(s) || 0) + 1);
+                                    if (occupiesPM) pmBookedCounts.set(s, (pmBookedCounts.get(s) || 0) + 1);
                                 });
-                            } else if (event.status === 'booked') {
-                                // Assume all monitored sizes occupied
+                            } else {
                                 totalSizes.forEach(s => {
-                                    if (occupiesAM) bookedSizesMapAM.set(s, (bookedSizesMapAM.get(s) || 0) + 1);
-                                    if (occupiesPM) bookedSizesMapPM.set(s, (bookedSizesMapPM.get(s) || 0) + 1);
+                                    if (occupiesAM) amBookedCounts.set(s, (amBookedCounts.get(s) || 0) + 1);
+                                    if (occupiesPM) pmBookedCounts.set(s, (pmBookedCounts.get(s) || 0) + 1);
                                 });
-                                // Block plain booking
-                                if (totalSizes.length === 0) {
-                                    if (occupiesAM) isAmFull = true;
-                                    if (occupiesPM) isPmFull = true;
-                                }
                             }
                         }
                     });
 
-                    if (hasBooking) {
-                        if (totalSizes.length > 0) {
-                            // Check capacity for AM and PM
-                            let amAllFull = true;
-                            let pmAllFull = true;
+                    // Availability Analysis Logic
+                    type SlotState = 'free' | 'booked' | 'warning' | 'out';
+                    let amState: SlotState = 'free';
+                    let pmState: SlotState = 'free';
 
-                            for (const size of totalSizes) {
-                                const cap = sizeQuantities[size] || 1;
-                                if ((bookedSizesMapAM.get(size) || 0) < cap) amAllFull = false;
-                                if ((bookedSizesMapPM.get(size) || 0) < cap) pmAllFull = false;
-                            }
-                            isAmFull = amAllFull;
-                            isPmFull = pmAllFull;
+                    const analyzeSlot = (counts: Map<string, number>, isOccupied: boolean) => {
+                        if (counts.size === 0 && !isOccupied) return 'free'; // No bookings at all for this slot
 
-                            if (isAmFull && isPmFull) {
-                                containerClass = "bg-red-50 border-red-200 text-red-800";
-                                isFullConfig = true;
-                            } else if (isAmFull) {
-                                containerClass = "bg-gradient-to-r from-red-50 to-white from-50% to-50% border-gray-200";
-                            } else if (isPmFull) {
-                                containerClass = "bg-gradient-to-r from-white to-red-50 from-50% to-50% border-gray-200";
-                            } else {
-                                const amCount = Array.from(bookedSizesMapAM.values()).reduce((a, b) => a + b, 0);
-                                if (amCount > 0 || Array.from(bookedSizesMapPM.values()).reduce((a, b) => a + b, 0) > 0) {
-                                    containerClass = "bg-orange-50 border-orange-200 text-orange-800";
-                                }
-                            }
-
-                        } else {
-                            // No sizes, using isAmFull direct
-                            if (isAmFull && isPmFull) {
-                                containerClass = "bg-red-50 border-red-200 text-red-800";
-                                isFullConfig = true;
-                            } else if (isAmFull) {
-                                containerClass = "bg-gradient-to-r from-red-50 to-white from-50% to-50% border-gray-200";
-                            } else if (isPmFull) {
-                                containerClass = "bg-gradient-to-r from-white to-red-50 from-50% to-50% border-gray-200";
-                            }
+                        const sizesToCheck = selectedSizeFilter ? [selectedSizeFilter] : totalSizes;
+                        if (sizesToCheck.length === 0) { // Fallback if no totalSizes and no filter, assume generic booking
+                            return isOccupied ? 'booked' : 'free';
                         }
+
+                        let warningCount = 0;
+                        let outCount = 0;
+                        let hasBookingForAnySize = false;
+
+                        sizesToCheck.forEach(s => {
+                            const cap = sizeQuantities[s] || 1;
+                            const count = counts.get(s) || 0;
+                            if (count > 0) hasBookingForAnySize = true;
+
+                            if (count >= cap) outCount++;
+                            else if (count > 0) warningCount++;
+                        });
+
+                        if (outCount === sizesToCheck.length) return 'out'; // All checked sizes are fully out
+                        if (outCount > 0) return 'warning'; // Some checked sizes are fully out
+                        if (warningCount > 0 || hasBookingForAnySize || isOccupied) return 'booked'; // Some checked sizes booked, stock remains for all, or just has a booking
+                        return 'free';
+                    };
+
+                    amState = analyzeSlot(amBookedCounts, amOccupied);
+                    pmState = analyzeSlot(pmBookedCounts, pmOccupied);
+
+                    const isToday = isSameDay(dayItem, new Date());
+
+                    // Native-Aesthetic Color Mapping
+                    const stateColors: Record<SlotState, string> = {
+                        'free': 'bg-gray-50 text-gray-900',
+                        'booked': 'bg-indigo-50 text-indigo-600 font-black',
+                        'warning': 'bg-[#FFF7ED] border-orange-200 text-orange-600 font-black',
+                        'out': 'bg-[#FEF2F2] border-red-200 text-red-600 font-black'
+                    };
+
+                    let cellStyle = stateColors[amState];
+                    if (amState !== pmState) {
+                        const amHex = amState === 'out' ? '#ef4444' : amState === 'warning' ? '#f97316' : amState === 'booked' ? '#4f46e5' : '#f9fafb';
+                        const pmHex = pmState === 'out' ? '#ef4444' : pmState === 'warning' ? '#f97316' : pmState === 'booked' ? '#4f46e5' : '#f9fafb';
+                        cellStyle = `bg-gradient-to-r from-[${amHex}] from-50% to-[${pmHex}] to-50%`;
+                        // Simplified fallback if gradient hex extraction fails in some browsers
+                        if (amState === 'out' && pmState === 'free') cellStyle = 'bg-gradient-to-r from-red-500 from-50% to-gray-50 to-50%';
+                        if (amState === 'free' && pmState === 'out') cellStyle = 'bg-gradient-to-r from-gray-50 from-50% to-red-500 to-50%';
+                        if (amState === 'warning' && pmState === 'free') cellStyle = 'bg-gradient-to-r from-orange-400 from-50% to-gray-50 to-50%';
+                        if (amState === 'free' && pmState === 'warning') cellStyle = 'bg-gradient-to-r from-gray-50 from-50% to-orange-400 to-50%';
+                    } else {
+                        // If both AM and PM are the same state, apply the full background color
+                        cellStyle = stateColors[amState];
                     }
 
-                    // Tooltip Construction
+
+                    let borderClass = "border-transparent";
+                    if (isToday) borderClass = "border-indigo-600 ring-2 ring-indigo-600/20";
+
                     let tooltipContent: React.ReactNode = null;
-                    let hasTooltip = false;
+                    if (amOccupied || pmOccupied) {
+                        const dayEvents = events.filter(e => {
+                            const start = format(e.start, 'yyyy-MM-dd');
+                            const end = format(e.end, 'yyyy-MM-dd');
+                            return dayKey >= start && dayKey <= end;
+                        });
 
-                    if (hasBooking && !isFullConfig) {
-                        const activeEvents = events.filter(e =>
-                            (isSameDay(dayItem, e.start) || isAfter(dayItem, e.start)) &&
-                            (isSameDay(dayItem, e.end) || isBefore(dayItem, e.end))
-                        );
-
-                        if (activeEvents.length > 0) {
-                            hasTooltip = true;
-                            tooltipContent = (
-                                <div className="w-max max-w-[200px] bg-gray-900 text-white text-[10px] p-2.5 rounded-lg shadow-xl border border-gray-800 animate-scale-in">
-                                    <div className="font-bold text-gray-300 mb-1.5 pb-1.5 border-b border-gray-700 uppercase tracking-wider flex justify-between items-center">
-                                        <span>{format(dayItem, 'MMM dd')}</span>
-                                        <span className="text-[9px] text-gray-500 font-mono">{format(dayItem, 'EEE')}</span>
+                        tooltipContent = (
+                            <div className="bg-[#0F172A]/90 text-white p-5 rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] min-w-[260px] border border-white/10 backdrop-blur-3xl animate-ios-popup pointer-events-auto">
+                                <div className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400 mb-4 pb-4 border-b border-white/5 flex justify-between items-center">
+                                    <span>{format(dayItem, 'EEEE, MMM dd')}</span>
+                                    <div className="flex gap-1">
+                                        {amState === 'out' || pmState === 'out' ? <span className="text-[8px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">SOLD OUT</span> : null}
+                                        {amState === 'warning' || pmState === 'warning' ? <span className="text-[8px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full">LIMITED</span> : null}
                                     </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        {activeEvents.map((e, i) => {
-                                            const isPickup = isSameDay(dayItem, e.start);
-                                            const isReturn = isSameDay(dayItem, e.end);
-                                            const sizes = e.bookedSizes?.join(', ') || 'All';
+                                </div>
+                                <div className="space-y-6">
+                                    {dayEvents.map((e, i) => {
+                                        const isPickup = format(dayItem, 'yyyy-MM-dd') === format(e.start, 'yyyy-MM-dd');
+                                        const isReturn = format(dayItem, 'yyyy-MM-dd') === format(e.end, 'yyyy-MM-dd');
 
-                                            let statusText = "Booked";
-                                            let statusColor = "text-indigo-300";
+                                        return (
+                                            <div key={i} className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-[13px] font-black leading-tight line-clamp-1 text-white tracking-tight">{e.title || 'Studio Order'}</div>
+                                                    <span className="text-[9px] bg-indigo-600 text-white px-2.5 py-1 rounded-full font-black uppercase shadow-lg shadow-indigo-500/20">S-{e.bookedSizes?.join(', ') || 'ALL'}</span>
+                                                </div>
 
-                                            if (isPickup) {
-                                                statusText = `Pickup (${e.pickupSlot === 'Morning' ? 'AM' : 'PM'})`;
-                                                statusColor = "text-emerald-300";
-                                            } else if (isReturn) {
-                                                statusText = `Return (${e.returnSlot === 'Morning' ? 'AM' : 'PM'})`;
-                                                statusColor = "text-amber-300";
-                                            }
-
-                                            return (
-                                                <div key={i} className="flex flex-col">
-                                                    <div className="flex justify-between items-center gap-3">
-                                                        <span className="font-bold text-white bg-gray-800 px-1.5 py-0.5 rounded border border-gray-700">
-                                                            Size {sizes}
-                                                        </span>
-                                                        <span className={`text-[9px] font-medium ${statusColor}`}>
-                                                            {statusText}
-                                                        </span>
+                                                <div className="flex flex-col gap-2 relative">
+                                                    <div className="grid grid-cols-2 gap-3 items-center">
+                                                        <div className={`p-2 rounded-2xl bg-white/5 border ${isPickup ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-white/5'}`}>
+                                                            <div className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Pickup</div>
+                                                            <div className="text-[10px] font-black text-gray-200">{format(e.start, 'MMM dd')}</div>
+                                                            <div className={`text-[8px] font-bold mt-0.5 ${isPickup ? 'text-emerald-400' : 'text-gray-500'}`}>{e.pickupSlot}</div>
+                                                        </div>
+                                                        <div className={`p-2 rounded-2xl bg-white/5 border ${isReturn ? 'border-orange-500/40 bg-orange-500/5' : 'border-white/5'}`}>
+                                                            <div className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Return</div>
+                                                            <div className="text-[10px] font-black text-gray-200">{format(e.end, 'MMM dd')}</div>
+                                                            <div className={`text-[8px] font-bold mt-0.5 ${isReturn ? 'text-orange-400' : 'text-gray-500'}`}>{e.returnSlot}</div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900 -mb-2"></div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        } else {
-                            hasTooltip = true;
-                            tooltipContent = <div className="bg-gray-900 text-gray-300 italic p-2 rounded text-[10px] shadow-xl">Fully allocated</div>;
-                        }
-                    } else if (isFullConfig) {
-                        hasTooltip = true;
-                        tooltipContent = (
-                            <div className="bg-red-900/90 backdrop-blur text-white text-[10px] font-bold px-2.5 py-1 rounded shadow-xl border border-red-800">
-                                Out of Stock
-                                <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-red-900/90 -mb-2"></div>
                             </div>
                         );
                     }
@@ -295,51 +373,74 @@ const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({ events, tot
                     return (
                         <div
                             key={idx}
-                            className={`
-                            relative group w-full aspect-square min-h-[40px] flex flex-col items-center justify-start py-0.5 rounded-md text-[10px] font-semibold cursor-pointer transition-all border
-                            ${containerClass}
-                        `}
-                            onMouseEnter={(e) => hasTooltip && handleMouseEnterNode(e, tooltipContent)}
-                            onMouseLeave={handleMouseLeaveNode}
+                            data-day-cell
+                            onMouseEnter={(e) => tooltipContent && window.innerWidth > 768 && handleDayInteraction(e, tooltipContent)}
+                            onMouseLeave={() => window.innerWidth > 768 && setTooltipData(null)}
+                            onClick={(e) => tooltipContent && handleDayInteraction(e, tooltipContent)}
+                            className={`aspect-square rounded-[1.2rem] flex items-center justify-center text-xs font-black border transition-all relative overflow-hidden active:scale-90 cursor-pointer ${cellStyle} ${borderClass}`}
                         >
-                            <span className="mb-0.5 text-gray-800">{format(dayItem, dateFormat)}</span>
-
-                            {/* Render Size Chips if Partial/Full but not visually blocked completely */}
-                            {hasBooking && !isFullConfig && (
-                                <div className="flex flex-wrap justify-center gap-0.5 w-full px-0.5">
-                                    <div className={`w-1 h-1 rounded-full ${isAmFull ? 'bg-red-500' : (bookedSizesMapAM.size > 0 ? 'bg-orange-400' : 'bg-green-200')}`}></div>
-                                    <div className={`w-1 h-1 rounded-full ${isPmFull ? 'bg-red-500' : (bookedSizesMapPM.size > 0 ? 'bg-orange-400' : 'bg-green-200')}`}></div>
-                                </div>
-                            )}
+                            <span className="relative z-10">{format(dayItem, "d")}</span>
+                            {isToday && <div className="absolute inset-0 bg-indigo-600/10 animate-pulse"></div>}
                         </div>
                     );
-
-
-                })
-                }
-            </div >
-        )
+                })}
+            </div>
+        );
     };
 
-    // Generate 6 months
-    const months = [];
-    for (let i = 0; i < 6; i++) {
-        months.push(addMonths(currentMonth, i));
+    const TooltipPortal = () => {
+        if (!tooltipData || typeof document === 'undefined') return null;
+
+        return createPortal(
+            <div
+                ref={tooltipRef}
+                className="fixed z-[9999] pointer-events-none"
+                style={{
+                    left: tooltipData.x,
+                    top: tooltipData.y,
+                    visibility: 'hidden',
+                    opacity: 0,
+                    willChange: 'transform, opacity'
+                }}
+            >
+                {tooltipData.content}
+            </div>,
+            document.body
+        );
+    };
+
+    const months = useMemo(() =>
+        Array.from({ length: 12 }, (_, i) => addMonths(startDate, i)),
+        [startDate]);
+
+    if (orientation === 'vertical') {
+        return (
+            <div className="space-y-12 relative">
+                {renderSizeFilter()}
+                {months.slice(0, 6).map((month, i) => (
+                    <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 100}ms` }}>
+                        {renderHeader(month)}
+                        {renderDays()}
+                        {renderMonthGrid(month)}
+                    </div>
+                ))}
+                <TooltipPortal />
+            </div>
+        );
     }
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 relative">
-            {/* Scrollable Container */}
+        <div className="relative group/cal select-none">
+            {renderSizeFilter()}
+
             <div
-                ref={scrollContainerRef}
-                className="flex overflow-x-auto pb-4 gap-6 scrollbar-hide cursor-grab select-none"
-                onMouseDown={handleMouseDown}
-                onMouseLeave={handleMouseLeave}
-                onMouseUp={handleMouseUp}
-                onMouseMove={handleMouseMove}
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide cursor-grab active:cursor-grabbing touch-pan-x"
+                style={{ WebkitOverflowScrolling: 'touch' }}
             >
-                {months.map((month, index) => (
-                    <div key={index} className="min-w-[300px] md:min-w-[45%] flex-shrink-0 border border-gray-100 rounded-lg p-4">
+                {months.map((month, i) => (
+                    <div key={i} className="min-w-full snap-center animate-fade-in px-1">
                         {renderHeader(month)}
                         {renderDays()}
                         {renderMonthGrid(month)}
@@ -347,19 +448,24 @@ const AvailabilityCalendar: React.FC<AvailabilityCalendarProps> = ({ events, tot
                 ))}
             </div>
 
-            <div className="flex justify-between items-center mt-2 text-sm text-gray-500 px-2">
-                <span>&larr; Drag or Scroll to see more dates &rarr;</span>
+            <div className="flex justify-center gap-2 mt-4">
+                {months.map((_, i) => (
+                    <button
+                        key={i}
+                        onClick={() => {
+                            if (scrollRef.current) {
+                                scrollRef.current.scrollTo({
+                                    left: i * scrollRef.current.clientWidth,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        }}
+                        className={`h-1.5 rounded-full transition-all duration-500 ${activeMonthIndex === i ? 'w-8 bg-[#0F172A]' : 'w-1.5 bg-gray-200'}`}
+                    />
+                ))}
             </div>
 
-            {/* Fixed Tooltip Portal */}
-            {tooltipData && (
-                <div
-                    className="fixed z-[9999] transform -translate-x-1/2 -translate-y-full pb-2 pointer-events-none"
-                    style={{ left: tooltipData.x, top: tooltipData.y }}
-                >
-                    {tooltipData.content}
-                </div>
-            )}
+            <TooltipPortal />
         </div>
     );
 };
